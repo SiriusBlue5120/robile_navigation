@@ -13,7 +13,8 @@ from nav2_common.launch import RewrittenYaml
 def generate_launch_description():
     
     robile_nav_dir = get_package_share_directory('robile_navigation')
-    map_file = os.path.join(robile_nav_dir, 'maps', 'map.yaml')
+    map_name = os.environ['ROBOT_ENV']
+    map_file = os.path.join(robile_nav_dir, 'maps', map_name+'.yaml')
     use_sim_time = True
 
     map_server = Node(
