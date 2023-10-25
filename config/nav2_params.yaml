@@ -161,20 +161,20 @@ controller_server:
       debug_trajectory_details: True
       min_vel_x: 0.1
       min_vel_y: 0.1
-      max_vel_x: 1.5
-      max_vel_y: 1.5 
-      max_vel_theta: 1.5
-      min_speed_xy: 0.1 #0.0
-      max_speed_xy: 1.5 #0.26
-      min_speed_theta: -1. #0.0
+      max_vel_x: 0.6
+      max_vel_y: 0.6 
+      max_vel_theta: 1.0
+      min_speed_xy: 0.1
+      max_speed_xy: 0.6
+      min_speed_theta: -1.
       # Add high threshold velocity for turtlebot 3 issue.
       # https://github.com/ROBOTIS-GIT/turtlebot3_simulations/issues/75
-      acc_lim_x: 1.5
+      acc_lim_x: 1.0
       acc_lim_y: 0.5 #0.0
       acc_lim_theta: 1.5
-      decel_lim_x: -2.5
+      decel_lim_x: -2.0
       decel_lim_y: -1.0 #0.0
-      decel_lim_theta: -3.2
+      decel_lim_theta: -3.0
       vx_samples: 5
       vy_samples: 5
       vtheta_samples: 20
@@ -310,7 +310,7 @@ map_server:
 map_saver:
   ros__parameters:
     use_sim_time: True
-    save_map_timeout: 5.0
+    save_map_timeout: 10.0
     free_thresh_default: 0.25
     occupied_thresh_default: 0.65
     map_subscribe_transient_local: True
@@ -379,9 +379,9 @@ recoveries_server:
     transform_timeout: 0.1
     use_sim_time: true
     simulate_ahead_time: 3.0
-    max_rotational_vel: 1.5
-    min_rotational_vel: -1.5
-    rotational_acc_lim: 3.2
+    max_rotational_vel: 1.0
+    min_rotational_vel: -1.0
+    rotational_acc_lim: 3.0
 
 robot_state_publisher:
   ros__parameters:
@@ -416,10 +416,10 @@ behavior_server:
     robot_base_frame: base_link
     transform_tolerance: 0.1
     use_sim_time: true
-    simulate_ahead_time: 2.0
-    max_rotational_vel: 1.5
-    min_rotational_vel: -1.5
-    rotational_acc_lim: 3.2
+    simulate_ahead_time: 3.0
+    max_rotational_vel: 1.0
+    min_rotational_vel: -1.0
+    rotational_acc_lim: 3.0
 
 robot_state_publisher:
   ros__parameters:
@@ -441,10 +441,10 @@ velocity_smoother:
     smoothing_frequency: 20.0
     scale_velocities: False
     feedback: "OPEN_LOOP"
-    max_velocity: [1.0, 0.0, 1.5] #0.26
-    min_velocity: [-0.2, 0.0, -1.5] #-0.26
-    max_accel: [2.5, 0.0, 3.2]
-    max_decel: [-2.5, 0.0, -3.2]
+    max_velocity: [0.6, 0.0, 1.0] 
+    min_velocity: [-0.2, 0.0, -1.0] 
+    max_accel: [2.0, 0.0, 3.0]
+    max_decel: [-2.0, 0.0, -3.0]
     odom_topic: "odom"
     odom_duration: 0.1
     deadband_velocity: [0.0, 0.0, 0.0]
@@ -498,11 +498,6 @@ collision_monitor:
     scan:
       type: "scan"
       topic: "/scan"
-    pointcloud:
-      type: "pointcloud"
-      topic: "/intel_realsense_r200_depth/points"
-      min_height: 0.1
-      max_height: 0.5
 
 
 collision_detector:
@@ -523,9 +518,4 @@ collision_detector:
     observation_sources: ["scan"]
     scan:
       type: "scan"
-      topic: "scan"
-    pointcloud:
-      type: "pointcloud"
-      topic: "/intel_realsense_r200_depth/points"
-      min_height: 0.1
-      max_height: 0.5
+      topic: "/scan"

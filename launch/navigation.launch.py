@@ -55,7 +55,7 @@ def launch_setup(context, *args, **kwargs):
                        'bt_navigator',
                        'waypoint_follower',
                        'velocity_smoother',
-                    #    'collision_monitor',
+                       'collision_monitor',
                     #    'collision_detector'
                        ]
 
@@ -160,22 +160,23 @@ def launch_setup(context, *args, **kwargs):
                 arguments=['--ros-args', '--log-level', log_level],
                 remappings=remappings +
                         [('cmd_vel', cmd_vel_prefix + 'cmd_vel_nav'), ('cmd_vel_smoothed', cmd_vel_prefix + 'cmd_vel')]),
-            # Node(
-            #     package='nav2_collision_monitor',
-            #     executable='collision_detector',
-            #     name='collision_detector',
-            #     output='screen',
-            #     emulate_tty=True,
-            #     # respawn=use_respawn,
-            #     # respawn_delay=2.0,
-            #     parameters=[configured_params],
-            #     # arguments=['--ros-args', '--log-level', log_level],
-            #     remappings=remappings),
+            Node(
+                package='nav2_collision_monitor',
+                executable='collision_monitor',
+                name='collision_monitor',
+                output='screen',
+                emulate_tty=True,
+                # respawn=use_respawn,
+                # respawn_delay=2.0,
+                parameters=[configured_params],
+                # arguments=['--ros-args', '--log-level', log_level],
+                remappings=remappings),
             Node(
                 package='nav2_lifecycle_manager',
                 executable='lifecycle_manager',
                 name='lifecycle_manager_navigation',
                 output='screen',
+                emulate_tty=True,
                 arguments=['--ros-args', '--log-level', log_level],
                 parameters=[{'use_sim_time': use_sim_time},
                             {'autostart': autostart},
@@ -238,12 +239,12 @@ def launch_setup(context, *args, **kwargs):
                 parameters=[{'use_sim_time': use_sim_time,
                              'autostart': autostart,
                              'node_names': lifecycle_nodes}]),
-            # ComposableNode(
-            #     package='nav2_collision_monitor',
-            #     plugin='nav2_collision_monitor::CollisionDetector',
-            #     name='collision_detector',
-            #     parameters=[configured_params],
-            #     remappings=remappings)                             
+            ComposableNode(
+                package='nav2_collision_monitor',
+                plugin='nav2_collision_monitor::CollisionMonitor',
+                name='collision_monitor',
+                parameters=[configured_params],
+                remappings=remappings)                             
         ],
     )
 
@@ -252,7 +253,7 @@ def launch_setup(context, *args, **kwargs):
 
 
 def generate_launch_description():
-    robot_name = os.environ['ROBOT']
+    robot_name = os.environ['ROBOT_NAME']
     # Get the launch directory
     bringup_dir = get_package_share_directory('nav2_bringup')
     robile_nav_dir = get_package_share_directory('robile_navigation')
