@@ -29,10 +29,5 @@ install(DIRECTORY launch config maps
 )
 
 ament_python_install_package(${PROJECT_NAME})
-install(PROGRAMS
-scripts/localization_launch.py
-scripts/navigation_launch.py
-  DESTINATION lib/${PROJECT_NAME}
-)
 
 ament_package()
