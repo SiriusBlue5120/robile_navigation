@@ -23,15 +23,16 @@ class LocalisationUsingKalmanFilter(Node):
         self.declare_parameters(
             namespace='',
             parameters=[
-                ('scan_topic', 'scan'),
-                ('real_laser_link_pose_topic', 'real_laser_link_pose'),
-                ('estimated_base_link_pose_topic', 'estimated_base_link_pose'),
-                ('rfid_tag_poses_topic', 'rfid_tag_poses'),
-                ('odom_topic', 'odom'),
                 ('map_frame', 'map'),
-                ('odom_frame', 'odom'),  
-                ('real_laser_link_frame', 'real_laser_link'), 
-                ('laser_link_frame', 'base_laser_front_link'),             
+                ('odom_frame', 'odom'),                
+                ('laser_link_frame', 'base_laser_front_link'),
+                ('real_base_link_frame', 'real_base_link'),
+                ('scan_topic', 'scan'),
+                ('odom_topic', 'odom'),
+                ('rfid_tag_poses_topic', 'rfid_tag_poses'),
+                ('initial_pose_topic', 'initialpose'),
+                ('real_base_link_pose_topic', 'real_base_link_pose'),
+                ('estimated_base_link_pose_topic', 'estimated_base_link_pose'),
                 ('minimum_travel_distance', 0.1),
                 ('minimum_travel_heading', 0.1),
                 ('rfid_tags.A', [0.,0.]),
@@ -41,14 +42,16 @@ class LocalisationUsingKalmanFilter(Node):
                 ('rfid_tags.E', [0.,0.]),                        
             ])
 
-        self.rfid_tag_poses_topic = self.get_parameter('rfid_tag_poses_topic').get_parameter_value().string_value
-        self.odom_topic = self.get_parameter('odom_topic').get_parameter_value().string_value
-        self.real_laser_link_pose_topic = self.get_parameter('real_laser_link_pose_topic').get_parameter_value().string_value
-        self.estimated_base_link_pose_topic = self.get_parameter('estimated_base_link_pose_topic').get_parameter_value().string_value
         self.map_frame = self.get_parameter('map_frame').get_parameter_value().string_value
         self.odom_frame = self.get_parameter('odom_frame').get_parameter_value().string_value
-        self.real_laser_link_frame = self.get_parameter('real_laser_link_frame').get_parameter_value().string_value
         self.laser_link_frame = self.get_parameter('laser_link_frame').get_parameter_value().string_value
+        self.real_base_link_frame = self.get_parameter('real_base_link_frame').get_parameter_value().string_value
+        self.scan_topic = self.get_parameter('scan_topic').get_parameter_value().string_value
+        self.odom_topic = self.get_parameter('odom_topic').get_parameter_value().string_value
+        self.rfid_tag_poses_topic = self.get_parameter('rfid_tag_poses_topic').get_parameter_value().string_value
+        self.initial_pose_topic = self.get_parameter('initial_pose_topic').get_parameter_value().string_value
+        self.real_base_link_pose_topic = self.get_parameter('real_base_link_pose_topic').get_parameter_value().string_value
+        self.estimated_base_link_pose_topic = self.get_parameter('estimated_base_link_pose_topic').get_parameter_value().string_value
         self.minimum_travel_distance = self.get_parameter('minimum_travel_distance').get_parameter_value().double_value
         self.minimum_travel_heading = self.get_parameter('minimum_travel_heading').get_parameter_value().double_value
         self.rfid_tags_A = self.get_parameter('rfid_tags.A').get_parameter_value().double_array_value
@@ -59,8 +62,9 @@ class LocalisationUsingKalmanFilter(Node):
 
         # setting up laser scan and rfid tag subscribers
         self.rfid_tag_subscriber = self.create_subscription(PositionLabelledArray, self.rfid_tag_poses_topic, self.rfid_callback, 10)
-        self.real_laser_link_subscriber = self.create_subscription(PoseStamped, self.real_laser_link_pose_topic, self.real_laser_link_pose_callback, 10)        
+        self.real_laser_link_subscriber = self.create_subscription(PoseStamped, self.real_base_link_pose_topic, self.real_base_link_pose_callback, 10)        
         self.estimated_robot_pose_publisher = self.create_publisher(PoseStamped, self.estimated_base_link_pose_topic, 10)
+        
         # setting up tf2 listener
         self.tf_buffer = tf2_ros.Buffer()
         self.tf_listener = tf2_ros.TransformListener(self.tf_buffer, self)
@@ -74,9 +78,9 @@ class LocalisationUsingKalmanFilter(Node):
         
         return
 
-    def real_laser_link_pose_callback(self, msg):
+    def real_base_link_pose_callback(self, msg):
         """
-        Updating the base_link pose based on the rviz input pose
+        Updating the base_link pose based on the update in robile_rfid_tag_finder.py
         """
         yaw = euler_from_quaternion([msg.pose.pose.orientation.x, msg.pose.pose.orientation.y, msg.pose.pose.orientation.z, msg.pose.pose.orientation.w])[2]
         self.real_laser_link_pose = [msg.pose.position.x, msg.pose.position.y, yaw]
