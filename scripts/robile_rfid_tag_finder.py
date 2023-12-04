@@ -26,12 +26,12 @@ class RFIDTagFinder(Node):
                 ('scan_topic', 'scan'),
                 ('rfid_tag_poses_topic', 'rfid_tag_poses'),
                 ('initial_pose_topic', 'initialpose'),
-                ('real_base_link_pose_topic', 'real_base_link_pose'),
+                ('real_laser_link_pose_topic', 'real_laser_link_pose'),
                 ('cmd_vel_topic', 'cmd_vel'),
                 ('odom_topic', 'odom'),
                 ('map_frame', 'map'),
                 ('odom_frame', 'odom'),
-                ('real_base_link_frame', 'real_base_link'),           
+                ('real_laser_link_frame', 'real_laser_link'),           
                 ('laser_link_frame', 'base_laser_front_link'),
                 ('odom_noise_linear_stddev', 0.01),
                 ('odom_noise_angular_stddev', 0.01),                
@@ -48,8 +48,8 @@ class RFIDTagFinder(Node):
         self.cmd_vel_topic = self.get_parameter('cmd_vel_topic').get_parameter_value().string_value
         self.rfid_tag_poses_topic = self.get_parameter('rfid_tag_poses_topic').get_parameter_value().string_value
         self.initial_pose_topic = self.get_parameter('initial_pose_topic').get_parameter_value().string_value
-        self.real_base_link_pose_topic = self.get_parameter('real_base_link_pose_topic').get_parameter_value().string_value
-        self.real_base_link_frame = self.get_parameter('real_base_link_frame').get_parameter_value().string_value
+        self.real_laser_link_pose_topic = self.get_parameter('real_laser_link_pose_topic').get_parameter_value().string_value
+        self.real_laser_link_frame = self.get_parameter('real_laser_link_frame').get_parameter_value().string_value
         self.map_frame = self.get_parameter('map_frame').get_parameter_value().string_value
         self.odom_frame = self.get_parameter('odom_frame').get_parameter_value().string_value
         self.laser_link_frame = self.get_parameter('laser_link_frame').get_parameter_value().string_value
@@ -67,9 +67,9 @@ class RFIDTagFinder(Node):
         self.scan_subscriber = self.create_subscription(LaserScan, self.scan_topic, self.scan_callback, 10)
         self.cmd_vel_subscriber = self.create_subscription(Twist, self.cmd_vel_topic, self.cmd_vel_callback, 10)
         self.rfid_tag_publisher = self.create_publisher(PositionLabelledArray, self.rfid_tag_poses_topic, 10)
-        self.real_robot_pose_publisher = self.create_publisher(PoseStamped, self.real_base_link_pose_topic, 10)
+        self.real_robot_pose_publisher = self.create_publisher(PoseStamped, self.real_laser_link_pose_topic, 10)
         self.initial_pose_subscriber = self.create_subscription(PoseWithCovarianceStamped, self.initial_pose_topic, self.initial_pose_callback, 10)
-        self.real_base_link_publisher = self.create_publisher(PoseStamped, self.real_base_link_pose_topic, 10)
+        self.real_laser_link_publisher = self.create_publisher(PoseStamped, self.real_laser_link_pose_topic, 10)
 
         # create dictionary of rfid points wrt odom frame in simulation (meters)
         self.rfid_points_dict = {}
@@ -81,9 +81,9 @@ class RFIDTagFinder(Node):
 
         # other variables
         self.scan_params_saved = False
-        self.real_base_link_pose_initialised = False
+        self.real_laser_link_pose_initialised = False
         self.previous_position = [0., 0., 0.] # robot pose wrt odom frame - ground truth
-        self.real_base_link_pose = [0., 0., 0.] # robot pose wrt odom frame - outcome of motion model (aka process model)
+        self.real_laser_link_pose = [0., 0., 0.] # robot pose wrt odom frame - outcome of motion model (aka process model)
         self.cmd_vel_msg = Twist()
 
         # setting up tf2 listener
@@ -108,16 +108,16 @@ class RFIDTagFinder(Node):
         base_link_pose.pose.orientation.y = msg.pose.pose.orientation.y
         base_link_pose.pose.orientation.z = msg.pose.pose.orientation.z
         base_link_pose.pose.orientation.w = msg.pose.pose.orientation.w
-        self.real_base_link_publisher.publish(base_link_pose)
+        self.real_laser_link_publisher.publish(base_link_pose)
 
     def scan_callback(self, msg):
         """
         The callback function for incoming laser scan message
         """
         # setting real base_link pose frame to X-axis of map_frame
-        if not self.real_base_link_pose_initialised:
+        if not self.real_laser_link_pose_initialised:
             self.initial_pose_callback(PoseWithCovarianceStamped())
-            self.real_base_link_pose_initialised = True
+            self.real_laser_link_pose_initialised = True
 
         # saving laser scan parameters
         if not self.scan_params_saved:
@@ -135,18 +135,18 @@ class RFIDTagFinder(Node):
                 return False
         cartesian_coordinates_wrt_odom = self.get_cartesian_coordinates(msg, laser_link_wrt_odom_link)
 
-        real_base_link_wrt_odom_link = self.get_transform(self.real_base_link_frame, self.odom_frame)
-        if isinstance(real_base_link_wrt_odom_link, bool):
-            if not real_base_link_wrt_odom_link:
+        real_laser_link_wrt_odom_link = self.get_transform(self.real_laser_link_frame, self.odom_frame)
+        if isinstance(real_laser_link_wrt_odom_link, bool):
+            if not real_laser_link_wrt_odom_link:
                 return False
         # detected_rfid_tag_wrt_laser_link = self.check_rfid_detection(cartesian_coordinates_wrt_odom, laser_link_wrt_odom_link)
-        detected_rfid_tag_wrt_real_base_link = self.check_rfid_detection(cartesian_coordinates_wrt_odom, real_base_link_wrt_odom_link)
+        detected_rfid_tag_wrt_real_laser_link = self.check_rfid_detection(cartesian_coordinates_wrt_odom, real_laser_link_wrt_odom_link)
 
         position_arr_msg = PositionLabelledArray()
         position_arr_msg.header.stamp = self.get_clock().now().to_msg()
-        position_arr_msg.header.frame_id = self.real_base_link_frame
-        if len(detected_rfid_tag_wrt_real_base_link) > 0:
-            for rfid_point in detected_rfid_tag_wrt_real_base_link:
+        position_arr_msg.header.frame_id = self.real_laser_link_frame
+        if len(detected_rfid_tag_wrt_real_laser_link) > 0:
+            for rfid_point in detected_rfid_tag_wrt_real_laser_link:
                 position_msg = PositionLabelled()
                 position_msg.name = rfid_point[2]
                 position_msg.position.x = rfid_point[0]
@@ -161,13 +161,13 @@ class RFIDTagFinder(Node):
         self.current_position = [msg.pose.pose.position.x, msg.pose.pose.position.y, euler_from_quaternion([msg.pose.pose.orientation.x, msg.pose.pose.orientation.y, msg.pose.pose.orientation.z, msg.pose.pose.orientation.w])[2]]
         # updating the real base_link pose only if the robot is moving
         if self.cmd_vel_msg.linear.x != 0.0 or self.cmd_vel_msg.linear.y != 0.0 or self.cmd_vel_msg.angular.z != 0.0:
-            self.publish_real_base_link_pose()
+            self.publish_real_laser_link_pose()
             self.previous_position = self.current_position            
 
     def cmd_vel_callback(self, msg):
         self.cmd_vel_msg = msg
 
-    def publish_real_base_link_pose(self):
+    def publish_real_laser_link_pose(self):
 
         msg = PoseStamped()
 
@@ -177,14 +177,14 @@ class RFIDTagFinder(Node):
 
         # updating the transform based on motion model
         # updated real odom frame: [prev_position + delta_position + noise]
-        x_upd = self.real_base_link_pose[0] + (self.current_position[0] - self.previous_position[0]) + linear_noise[0]
-        y_upd = self.real_base_link_pose[1] + (self.current_position[1] - self.previous_position[1]) + linear_noise[1]
-        theta_upd = self.real_base_link_pose[2] + (self.current_position[2] - self.previous_position[2]) + angular_noise[0]
+        x_upd = self.real_laser_link_pose[0] + (self.current_position[0] - self.previous_position[0]) + linear_noise[0]
+        y_upd = self.real_laser_link_pose[1] + (self.current_position[1] - self.previous_position[1]) + linear_noise[1]
+        theta_upd = self.real_laser_link_pose[2] + (self.current_position[2] - self.previous_position[2]) + angular_noise[0]
 
         # updating the base_link pose
-        self.real_base_link_pose[0] = x_upd
-        self.real_base_link_pose[1] = y_upd
-        self.real_base_link_pose[2] = theta_upd
+        self.real_laser_link_pose[0] = x_upd
+        self.real_laser_link_pose[1] = y_upd
+        self.real_laser_link_pose[2] = theta_upd
         quat_x, quat_y, quat_z, quat_w = quaternion_from_euler(0.0, 0.0, theta_upd)
 
         msg.header.stamp = self.get_clock().now().to_msg()
@@ -202,7 +202,7 @@ class RFIDTagFinder(Node):
         transform = TransformStamped()
         transform.header.stamp = self.get_clock().now().to_msg()
         transform.header.frame_id = self.map_frame
-        transform.child_frame_id = self.real_base_link_frame
+        transform.child_frame_id = self.real_laser_link_frame
         transform.transform.translation.x = x_upd
         transform.transform.translation.y = y_upd
         transform.transform.translation.z = 0.0

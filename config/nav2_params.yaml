@@ -336,7 +336,7 @@ planner_server:
       rotation_penalty: 1.0               # Penalty to apply to in-place rotations, if minimum control set contains them
       retrospective_penalty: 0.015 # penalty on pevious bad decisions
       #NOTE: once cloned on the robot, change the path to the complete filepath of lattice file on the robot, which is placed in the config folder of robile_navigation package
-      lattice_filepath: "/home/__user_name__/__ros2_ws_name__/src/robile_navigation/config/smacPlannerLattice.json"     # The filepath to the state lattice graph
+      lattice_filepath: "/home/melody-u18/ros2_ws/src/robile_navigation/config/smacPlannerLattice.json"     # The filepath to the state lattice graph
       lookup_table_size: 20.0             # Size of the dubin/reeds-sheep distance window to cache, in meters.
       cache_obstacle_heuristic: false     # Cache the obstacle map dynamic programming distance expansion heuristic between subsiquent replannings of the same goal location. Dramatically speeds up replanning performance (40x) if costmap is largely static.
       allow_reverse_expansion: true # cahanged from false      # If true, allows the robot to use the primitives to expand in the mirrored opposite direction of the current robot's orientation (to reverse).
