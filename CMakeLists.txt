@@ -11,6 +11,7 @@ find_package(ament_cmake_python REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rclpy REQUIRED)
 find_package(nav_msgs REQUIRED)
+find_package(robile_interfaces REQUIRED)
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
@@ -29,5 +30,11 @@ install(DIRECTORY launch config maps
 )
 
 ament_python_install_package(${PROJECT_NAME})
+
+install(PROGRAMS
+  scripts/robile_rfid_tag_finder.py
+  DESTINATION lib/${PROJECT_NAME}
+)
+
 
 ament_package()
