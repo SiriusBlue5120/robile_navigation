@@ -69,14 +69,20 @@ class LocalisationUsingKalmanFilter(Node):
         self.tf_buffer = tf2_ros.Buffer()
         self.tf_listener = tf2_ros.TransformListener(self.tf_buffer, self)
 
+        # State matrix:
+        # position x, position y, heading position (yaw) theta,
+        # velocity x, velocity y, heading velocity (yaw) omega
+        self.state: np.ndarray = np.array([0.0, 0.0, 0.0, \
+                                           0.0, 0.0, 0.0])
+
  
-    def rfid_callback(self, msg):
+    def rfid_callback(self, msg: PositionLabelledArray):
         """
         Based on the detected RFID tags, performing measurement update
         """
         ### YOUR CODE HERE ###
 
-        pass
+        self.get_logger().info(f"Tag msg: {msg}")
         
         return
 
