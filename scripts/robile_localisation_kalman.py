@@ -72,8 +72,7 @@ class LocalisationUsingKalmanFilter(Node):
         # State matrix:
         # position x, position y, heading position (yaw) theta,
         # velocity x, velocity y, heading velocity (yaw) omega
-        self.state: np.ndarray = np.array([0.0, 0.0, 0.0, \
-                                           0.0, 0.0, 0.0])
+        self.state = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
 
  
     def rfid_callback(self, msg: PositionLabelledArray):
@@ -92,6 +91,18 @@ class LocalisationUsingKalmanFilter(Node):
         """
         yaw = euler_from_quaternion([msg.pose.pose.orientation.x, msg.pose.pose.orientation.y, msg.pose.pose.orientation.z, msg.pose.pose.orientation.w])[2]
         self.real_laser_link_pose = [msg.pose.position.x, msg.pose.position.y, yaw]
+
+    
+    def motion_update(self, state: np.ndarray, control_input: np.ndarray, time_step: float):
+        """
+        Update estimate of state with control input
+        """
+
+        state_motion_prediction = np.array(state)
+
+        # TODO: control update
+
+        return state_motion_prediction
 
 
 def main(args=None):

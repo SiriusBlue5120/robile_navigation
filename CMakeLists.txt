@@ -33,6 +33,7 @@ ament_python_install_package(${PROJECT_NAME})
 
 install(PROGRAMS
   scripts/robile_rfid_tag_finder.py
+  scripts/robile_localisation_kalman.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

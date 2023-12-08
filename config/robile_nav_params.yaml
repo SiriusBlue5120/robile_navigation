@@ -28,7 +28,7 @@ rfid_tag_finder:
       E: [4.0, -4.0]
 
 
-localisation_using_kalman:
+localisation_using_kalman_filter:
   ros__parameters:
 
     # Frames

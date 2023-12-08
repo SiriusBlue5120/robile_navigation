@@ -23,7 +23,15 @@ def generate_launch_description():
         parameters=[robile_nav_params],
     )
 
+    localisation_kalman_node = Node(
+        package='robile_navigation',
+        executable='robile_localisation_kalman.py',
+        name='localisation_using_kalman_filter',
+        parameters=[robile_nav_params],
+    )
+
     return LaunchDescription([
         rfid_tag_finder_node,
-        static_transform_cmd
+        static_transform_cmd,
+        localisation_kalman_node,
     ])
