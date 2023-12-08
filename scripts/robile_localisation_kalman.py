@@ -2,7 +2,7 @@
 
 import rclpy
 from rclpy.node import Node
-from geometry_msgs.msg import PoseStamped
+from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped
 from robile_interfaces.msg import PositionLabelled, PositionLabelledArray
 from nav_msgs.msg import Odometry
 import numpy as np
@@ -63,7 +63,8 @@ class LocalisationUsingKalmanFilter(Node):
         # setting up laser scan and rfid tag subscribers
         self.rfid_tag_subscriber = self.create_subscription(PositionLabelledArray, self.rfid_tag_poses_topic, self.rfid_callback, 10)
         self.real_laser_link_subscriber = self.create_subscription(PoseStamped, self.real_base_link_pose_topic, self.real_base_link_pose_callback, 10)        
-        self.estimated_robot_pose_publisher = self.create_publisher(PoseStamped, self.estimated_base_link_pose_topic, 10)
+        # self.estimated_robot_pose_publisher = self.create_publisher(PoseStamped, self.estimated_base_link_pose_topic, 10)
+        self.estimated_robot_pose_publisher = self.create_publisher(PoseWithCovarianceStamped, self.estimated_base_link_pose_topic, 10)
         
         # setting up tf2 listener
         self.tf_buffer = tf2_ros.Buffer()
@@ -82,6 +83,7 @@ class LocalisationUsingKalmanFilter(Node):
         # position x, position y, heading position (yaw) theta,
         # velocity x, velocity y, heading velocity (yaw) omega
         self.state = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+        self.timestamp = {"sec": 0, "nanosec": 0}
 
         # Debug
         self.debug = True
@@ -101,6 +103,40 @@ class LocalisationUsingKalmanFilter(Node):
             detected_tags.update({tag_name: tag_position})
 
         return detected_tags
+    
+
+    def create_pose_from_state(self, state, covariance, frame_id, timestamp) -> PoseWithCovarianceStamped:
+        """
+        Create a PoseWithCovarianceStamped object from given state and covariance matrices
+        """
+        pose_cov = PoseWithCovarianceStamped()
+
+        # Header
+        pose_cov.header.frame_id = frame_id
+
+        pose_cov.header.stamp.sec = timestamp["sec"]
+        pose_cov.header.stamp.nanosec = timestamp["nanosec"]
+
+        # Position
+        pose_cov.pose.pose.position.x = state[0]
+        pose_cov.pose.pose.position.y = state[1]
+        pose_cov.pose.pose.position.z = 0.0
+
+        # Orientation
+        state_quat = quaternion_from_euler(0.0, 0.0, state[2])
+
+        pose_cov.pose.pose.orientation.x = state_quat[0]
+        pose_cov.pose.pose.orientation.y = state_quat[1]
+        pose_cov.pose.pose.orientation.z = state_quat[2]
+        pose_cov.pose.pose.orientation.w = state_quat[3]
+
+        # Covariance
+        # TODO: Modify this to use the correct covariance
+        # Zero for now
+        state_covariance = np.zeros_like(pose_cov.pose.covariance)
+        pose_cov.pose.covariance = state_covariance
+
+        return pose_cov
 
  
     def rfid_callback(self, msg: PositionLabelledArray):
