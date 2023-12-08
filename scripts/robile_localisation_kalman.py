@@ -174,7 +174,18 @@ class LocalisationUsingKalmanFilter(Node):
         # TODO: control update
 
         return state_motion_prediction
+    
+    def kalman_filter_gain (
+                            cov_matrix : np.array,
+                            measurement_matrix: np.array,
+                            measurement_noise : np.array
+                            ):
 
+        kalman_gain = cov_matrix @ measurement_matrix.T @ np.linalg.inv(
+        measurement_matrix @ cov_matrix @ measurement_matrix.T + measurement_noise)
+
+        return kalman_gain
+    
 
 def main(args=None):
     rclpy.init(args=args)
