@@ -67,7 +67,7 @@ class RFIDTagFinder(Node):
         self.odom_subscriber = self.create_subscription(Odometry, self.odom_topic, self.odom_callback, 10)        
         self.scan_subscriber = self.create_subscription(LaserScan, self.scan_topic, self.scan_callback, 10)
         self.cmd_vel_subscriber = self.create_subscription(Twist, self.cmd_vel_topic, self.cmd_vel_callback, 10)
-        self.initial_pose_subscriber = self.create_subscription(PoseWithCovarianceStamped, self.initial_pose_topic, self.initial_pose_callback, 10)
+        self.initial_pose_subscriber = self.create_subscription(PoseWithCovarianceStamped, self.initial_pose_topic, self.initial_pose_callback, 10) # self.initial_pose_callback is also called at the first instance of laser scan message with default PoseWithCovarianceStamped() message
         self.rfid_tag_publisher = self.create_publisher(PositionLabelledArray, self.rfid_tag_poses_topic, 10)
         self.real_base_link_pose_publisher = self.create_publisher(PoseStamped, self.real_base_link_pose_topic, 10)
         self.estimated_base_link_pose_publisher = self.create_publisher(PoseWithCovarianceStamped, self.estimated_base_link_pose_topic, 10)
@@ -84,8 +84,7 @@ class RFIDTagFinder(Node):
         self.scan_params_saved = False
         self.real_and_estimated_base_link_pose_initialised = False
         self.laser_wrt_base_link_found = False
-        self.previous_position = [0., 0., 0.] # robot pose wrt map frame - ground truth
-        self.real_base_link_wrt_map = [0., 0., 0.] # robot pose wrt map frame - outcome of motion model (aka process model)
+        self.previous_position = [0., 0., 0.] # robot pose wrt map frame in real world (meters). It is used to get the distance travelled in a given time period using odom data
         self.cmd_vel_msg = Twist()
 
         # setting up tf2 listener
@@ -100,6 +99,9 @@ class RFIDTagFinder(Node):
         This callback function is called when initial pose is set in rviz and the first laser scan message is received.
         Every time the initial pose is set in rviz, both the real_base_link and estimated_base_link poses are initialised.
         """
+        yaw = euler_from_quaternion([msg.pose.pose.orientation.x, msg.pose.pose.orientation.y, msg.pose.pose.orientation.z, msg.pose.pose.orientation.w])[2]
+        self.real_base_link_wrt_map = [msg.pose.pose.position.x, msg.pose.pose.position.y, yaw] # robot pose wrt map frame in real world (meters)
+
         base_link_pose = PoseStamped()
         base_link_pose.header.stamp = self.get_clock().now().to_msg()
         base_link_pose.header.frame_id = self.map_frame
@@ -199,22 +201,32 @@ class RFIDTagFinder(Node):
 
         # updating the transform based on motion model
         # updated real odom frame: [prev_position + delta_position + noise]
-        x_upd = self.real_base_link_wrt_map[0] + (self.current_position[0] - self.previous_position[0]) + linear_noise[0]
-        y_upd = self.real_base_link_wrt_map[1] + (self.current_position[1] - self.previous_position[1]) + linear_noise[1]
-        theta_upd = self.real_base_link_wrt_map[2] + (self.current_position[2] - self.previous_position[2]) + angular_noise[0]
+        del_x_wrt_odom = self.current_position[0] - self.previous_position[0]
+        del_y_wrt_odom = self.current_position[1] - self.previous_position[1]
+        del_theta = self.current_position[2] - self.previous_position[2]
+
+        del_x_wrt_odom_with_noise = del_x_wrt_odom + np.clip(linear_noise[0], -np.abs(del_x_wrt_odom), np.abs(del_x_wrt_odom))
+        del_y_wrt_odom_with_noise = del_y_wrt_odom + np.clip(linear_noise[1], -np.abs(del_y_wrt_odom), np.abs(del_y_wrt_odom))
+        del_theta_with_noise = del_theta + np.clip(angular_noise[0], -np.abs(del_theta), np.abs(del_theta))
+
+        # transforming del_x_with_noise and del_y_with_noise to real_base_link frame
+        del_pos_wrt_base_link = np.array([[np.cos(self.current_position[2]), np.sin(self.current_position[2])], [-np.sin(self.current_position[2]), np.cos(self.current_position[2])]]) @ np.array([[del_x_wrt_odom_with_noise], [del_y_wrt_odom_with_noise]])
+
+        del_pos_real_base_link_wrt_map = np.array([[np.cos(self.real_base_link_wrt_map[2]), -np.sin(self.real_base_link_wrt_map[2])], [np.sin(self.real_base_link_wrt_map[2]), np.cos(self.real_base_link_wrt_map[2])]]) @ del_pos_wrt_base_link
+        del_pos_real_base_link_wrt_map = del_pos_real_base_link_wrt_map.reshape(-1)
 
         # updating the base_link pose
-        self.real_base_link_wrt_map[0] = x_upd
-        self.real_base_link_wrt_map[1] = y_upd
-        self.real_base_link_wrt_map[2] = theta_upd
-        quat_x, quat_y, quat_z, quat_w = quaternion_from_euler(0.0, 0.0, theta_upd)
+        self.real_base_link_wrt_map[0] += del_pos_real_base_link_wrt_map[0]
+        self.real_base_link_wrt_map[1] += del_pos_real_base_link_wrt_map[1]
+        self.real_base_link_wrt_map[2] += del_theta_with_noise
+        quat_x, quat_y, quat_z, quat_w = quaternion_from_euler(0.0, 0.0, self.real_base_link_wrt_map[2])
 
         # publishing the real_base_link pose
         msg = PoseStamped()
         msg.header.stamp = self.get_clock().now().to_msg()
         msg.header.frame_id = self.map_frame
-        msg.pose.position.x = x_upd
-        msg.pose.position.y = y_upd
+        msg.pose.position.x = float(self.real_base_link_wrt_map[0])
+        msg.pose.position.y = float(self.real_base_link_wrt_map[1])
         msg.pose.orientation.x = quat_x
         msg.pose.orientation.y = quat_y
         msg.pose.orientation.z = quat_z
@@ -226,9 +238,8 @@ class RFIDTagFinder(Node):
         t.header.stamp = self.get_clock().now().to_msg()
         t.header.frame_id = self.map_frame
         t.child_frame_id = self.real_base_link_frame
-        t.transform.translation.x = x_upd
-        t.transform.translation.y = y_upd
-        t.transform.translation.z = 0.0
+        t.transform.translation.x = float(self.real_base_link_wrt_map[0])
+        t.transform.translation.y = float(self.real_base_link_wrt_map[1])
         t.transform.rotation.x = quat_x
         t.transform.rotation.y = quat_y
         t.transform.rotation.z = quat_z
@@ -265,9 +276,7 @@ class RFIDTagFinder(Node):
 
         try:
             while not self.tf_buffer.can_transform(child_frame, parent_frame, tf2_ros.Time()):
-                self.get_logger().warn('Waiting for transform ...')
-                self.get_logger().warn('child_frame: ' + child_frame)
-                self.get_logger().warn('parent_frame: ' + parent_frame)
+                self.get_logger().warn('Waiting for transform from ' + parent_frame + ' to ' + child_frame + ' frame...')
                 time.sleep(1.0)
                 return False
             transform = self.tf_buffer.lookup_transform(parent_frame, child_frame, tf2_ros.Time())
