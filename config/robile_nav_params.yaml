@@ -16,9 +16,9 @@ rfid_tag_finder:
     estimated_base_link_pose_topic: estimated_base_link_pose
 
     # other parameters
-    laserscan_noise_stddev: 0.01
-    odom_noise_linear_stddev: 0.01
-    odom_noise_angular_stddev: 0.01   
+    laserscan_noise_stddev: 0.05
+    odom_noise_linear_stddev: 0.05
+    odom_noise_angular_stddev: 0.05   
     
     rfid_tags:
       A: [1.0, 1.0]
