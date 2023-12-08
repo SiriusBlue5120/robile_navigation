@@ -85,11 +85,14 @@ class LocalisationUsingKalmanFilter(Node):
         
         return
 
-    def real_base_link_pose_callback(self, msg):
+    def real_base_link_pose_callback(self, msg: PoseStamped):
         """
         Updating the base_link pose based on the update in robile_rfid_tag_finder.py
         """
-        yaw = euler_from_quaternion([msg.pose.pose.orientation.x, msg.pose.pose.orientation.y, msg.pose.pose.orientation.z, msg.pose.pose.orientation.w])[2]
+        
+        self.get_logger().info(f"real_base_link_pose msg: {msg}")
+
+        yaw = euler_from_quaternion([msg.pose.orientation.x, msg.pose.orientation.y, msg.pose.orientation.z, msg.pose.orientation.w])[2]
         self.real_laser_link_pose = [msg.pose.position.x, msg.pose.position.y, yaw]
 
     
