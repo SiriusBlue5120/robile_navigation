@@ -69,10 +69,38 @@ class LocalisationUsingKalmanFilter(Node):
         self.tf_buffer = tf2_ros.Buffer()
         self.tf_listener = tf2_ros.TransformListener(self.tf_buffer, self)
 
+        # Dict mapping tag names to their respective variable names
+        self.tag_map = {
+            "A": self.rfid_tags_A,
+            "B": self.rfid_tags_B,
+            "C": self.rfid_tags_C,
+            "D": self.rfid_tags_D,
+            "E": self.rfid_tags_E
+        }
+
         # State matrix:
         # position x, position y, heading position (yaw) theta,
         # velocity x, velocity y, heading velocity (yaw) omega
         self.state = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+
+        # Debug
+        self.debug = True
+
+
+    def get_detected_tags(self, msg: PositionLabelledArray) -> dict[str, np.ndarray]:
+        """
+        Parses PositionLabelledArray into a dictionary of detected tags by name: position
+        """
+        detected_tags = {}
+        for tag in msg.positions:
+            tag: PositionLabelled
+                
+            tag_name = tag.name
+            tag_position = np.array([tag.position.x, tag.position.y, tag.position.z])
+            
+            detected_tags.update({tag_name: tag_position})
+
+        return detected_tags
 
  
     def rfid_callback(self, msg: PositionLabelledArray):
@@ -81,15 +109,19 @@ class LocalisationUsingKalmanFilter(Node):
         """
         ### YOUR CODE HERE ###
 
-        self.get_logger().info(f"Tag msg: {msg}")
+        detected_tags = self.get_detected_tags(msg)
+
+        if self.debug:
+            self.get_logger().info(f"Detected tags: {detected_tags}")
         
         return
+
 
     def real_base_link_pose_callback(self, msg: PoseStamped):
         """
         Updating the base_link pose based on the update in robile_rfid_tag_finder.py
         """
-        
+
         self.get_logger().info(f"real_base_link_pose msg: {msg}")
 
         yaw = euler_from_quaternion([msg.pose.orientation.x, msg.pose.orientation.y, msg.pose.orientation.z, msg.pose.orientation.w])[2]
