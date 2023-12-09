@@ -2,7 +2,7 @@
 
 import rclpy
 from rclpy.node import Node
-from geometry_msgs.msg import PoseStamped
+from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped
 from robile_interfaces.msg import PositionLabelled, PositionLabelledArray
 from nav_msgs.msg import Odometry
 import numpy as np
@@ -63,16 +63,80 @@ class LocalisationUsingKalmanFilter(Node):
         # setting up laser scan and rfid tag subscribers
         self.rfid_tag_subscriber = self.create_subscription(PositionLabelledArray, self.rfid_tag_poses_topic, self.rfid_callback, 10)
         self.real_laser_link_subscriber = self.create_subscription(PoseStamped, self.real_base_link_pose_topic, self.real_base_link_pose_callback, 10)        
-        self.estimated_robot_pose_publisher = self.create_publisher(PoseStamped, self.estimated_base_link_pose_topic, 10)
+        # self.estimated_robot_pose_publisher = self.create_publisher(PoseStamped, self.estimated_base_link_pose_topic, 10)
+        self.estimated_robot_pose_publisher = self.create_publisher(PoseWithCovarianceStamped, self.estimated_base_link_pose_topic, 10)
         
         # setting up tf2 listener
         self.tf_buffer = tf2_ros.Buffer()
         self.tf_listener = tf2_ros.TransformListener(self.tf_buffer, self)
 
+        # Dict mapping tag names to their respective variable names
+        self.tag_map = {
+            "A": self.rfid_tags_A,
+            "B": self.rfid_tags_B,
+            "C": self.rfid_tags_C,
+            "D": self.rfid_tags_D,
+            "E": self.rfid_tags_E
+        }
+
         # State matrix:
         # position x, position y, heading position (yaw) theta,
         # velocity x, velocity y, heading velocity (yaw) omega
         self.state = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+        self.timestamp = {"sec": 0, "nanosec": 0}
+
+        # Debug
+        self.debug = True
+
+
+    def get_detected_tags(self, msg: PositionLabelledArray) -> dict[str, np.ndarray]:
+        """
+        Parses PositionLabelledArray into a dictionary of detected tags by name: position
+        """
+        detected_tags = {}
+        for tag in msg.positions:
+            tag: PositionLabelled
+                
+            tag_name = tag.name
+            tag_position = np.array([tag.position.x, tag.position.y, tag.position.z])
+            
+            detected_tags.update({tag_name: tag_position})
+
+        return detected_tags
+    
+
+    def create_pose_from_state(self, state, covariance, frame_id, timestamp) -> PoseWithCovarianceStamped:
+        """
+        Create a PoseWithCovarianceStamped object from given state and covariance matrices
+        """
+        pose_cov = PoseWithCovarianceStamped()
+
+        # Header
+        pose_cov.header.frame_id = frame_id
+
+        pose_cov.header.stamp.sec = timestamp["sec"]
+        pose_cov.header.stamp.nanosec = timestamp["nanosec"]
+
+        # Position
+        pose_cov.pose.pose.position.x = state[0]
+        pose_cov.pose.pose.position.y = state[1]
+        pose_cov.pose.pose.position.z = 0.0
+
+        # Orientation
+        state_quat = quaternion_from_euler(0.0, 0.0, state[2])
+
+        pose_cov.pose.pose.orientation.x = state_quat[0]
+        pose_cov.pose.pose.orientation.y = state_quat[1]
+        pose_cov.pose.pose.orientation.z = state_quat[2]
+        pose_cov.pose.pose.orientation.w = state_quat[3]
+
+        # Covariance
+        # TODO: Modify this to use the correct covariance
+        # Zero for now
+        state_covariance = np.zeros_like(pose_cov.pose.covariance)
+        pose_cov.pose.covariance = state_covariance
+
+        return pose_cov
 
  
     def rfid_callback(self, msg: PositionLabelledArray):
@@ -81,15 +145,19 @@ class LocalisationUsingKalmanFilter(Node):
         """
         ### YOUR CODE HERE ###
 
-        self.get_logger().info(f"Tag msg: {msg}")
+        detected_tags = self.get_detected_tags(msg)
+
+        if self.debug:
+            self.get_logger().info(f"Detected tags: {detected_tags}")
         
         return
+
 
     def real_base_link_pose_callback(self, msg: PoseStamped):
         """
         Updating the base_link pose based on the update in robile_rfid_tag_finder.py
         """
-        
+
         self.get_logger().info(f"real_base_link_pose msg: {msg}")
 
         yaw = euler_from_quaternion([msg.pose.orientation.x, msg.pose.orientation.y, msg.pose.orientation.z, msg.pose.orientation.w])[2]
@@ -115,7 +183,19 @@ class LocalisationUsingKalmanFilter(Node):
 
         #return state_motion_prediction
         return x_k,P_k
+        #return state_motion_prediction
+    
+    def kalman_filter_gain (
+                            cov_matrix : np.array,
+                            measurement_matrix: np.array,
+                            measurement_noise : np.array
+                            ):
 
+        kalman_gain = cov_matrix @ measurement_matrix.T @ np.linalg.inv(
+        measurement_matrix @ cov_matrix @ measurement_matrix.T + measurement_noise)
+
+        return kalman_gain
+    
 
 def main(args=None):
     rclpy.init(args=args)
