@@ -84,6 +84,8 @@ class LocalisationUsingKalmanFilter(Node):
         # velocity x, velocity y, heading velocity (yaw) omega
         self.state = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
         self.timestamp = {"sec": 0, "nanosec": 0}
+        self.cov_matrix = np.array([[0.001,0.0,0.0],[0.0,0.001,0.0],[0.,0.,0.001]])
+        self.noise_density = np.array([[0.1],[0.1],[0.1]])
 
         # Debug
         self.debug = True
@@ -164,24 +166,22 @@ class LocalisationUsingKalmanFilter(Node):
         self.real_laser_link_pose = [msg.pose.position.x, msg.pose.position.y, yaw]
 
     
-    def motion_update(self, state: np.ndarray, cov_matrix: np.ndarray, control_input: np.ndarray, noise_density:np.ndarray, time_step: float):
+    def motion_update(self, state: np.ndarray, control_input: np.ndarray, time_step: float):
         """
         Update estimate of state with control input
         Assuming state to be 3x1 and control input as velocity 3x1
         """
-
+        
         state_motion_prediction = np.array(state)
         F_k_1 = np.array([[1,0,0],[0,1,0],[0,0,1]])
         G_k_1 = np.zeros((3,3))
         G_k_1 = np.fill_diagonal(G_k_1,time_step)
 
         x_k = F_k_1@state + G_k_1@control_input
-        P_k = F_k_1@cov_matrix@(F_k_1.T) + noise_density
+        P_k = F_k_1@self.cov_matrix@(F_k_1.T) + self.noise_density
 
         
         # TODO: control update
-
-        #return state_motion_prediction
         return x_k,P_k
         #return state_motion_prediction
     
