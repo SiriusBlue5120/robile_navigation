@@ -2,7 +2,7 @@
 
 import rclpy
 from rclpy.node import Node
-from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped, TransformStamped
+from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped, TransformStamped, Twist
 from robile_interfaces.msg import PositionLabelled, PositionLabelledArray
 from nav_msgs.msg import Odometry
 import numpy as np
@@ -68,10 +68,12 @@ class LocalisationUsingKalmanFilter(Node):
         # Modifying as per assignment requirement
         # self.estimated_robot_pose_publisher = self.create_publisher(PoseStamped, self.estimated_base_link_pose_topic, 10)
         self.estimated_robot_pose_publisher = self.create_publisher(PoseWithCovarianceStamped, self.estimated_base_link_pose_topic, 10)
-
+        self.cmd_vel_subscriber = self.create_subscription(Twist, '\cmd_vel', self.cmd_vel_callback, 10)
+       
         # setting up tf2 listener
         self.tf_buffer = tf2_ros.Buffer()
         self.tf_listener = tf2_ros.TransformListener(self.tf_buffer, self)
+        self.time_step = 0.5
 
         # Dict mapping tag names to their respective variable names
         self.tag_map = {
@@ -84,15 +86,18 @@ class LocalisationUsingKalmanFilter(Node):
 
         # State matrix:
         # position x, position y, heading position (yaw) theta,
-        self.state = np.array([0.0, 0.0, 0.0])
+        self.state_after_prediction = np.array([0.0, 0.0, 0.0])
         self.timestamp = {"sec": 0, "nanosec": 0}
-        self.cov_matrix = np.array([[0.001,0.0,0.0],[0.0,0.001,0.0],[0.,0.,0.001]])
-        self.noise_density = np.array([[0.1],[0.1],[0.1]])
+        self.cov_matrix_after_prediction = np.array([[0.001,0.0,0.0],[0.0,0.001,0.0],[0.,0.,0.001]])
+        self.noise_density = np.eye(3,3)*0.1
+        self.control_input = np.array([0.0,0.0,0.0])
 
         # Debug
         self.verbose = True
 
-
+    def cmd_vel_callback(self, msg:Twist):
+        self.control_input = np.array([msg.linear.x,msg.linear.y,msg.angular.z])
+        
     def get_detected_tags(self, msg: PositionLabelledArray) -> dict[str, np.ndarray]:
         """
         Parses PositionLabelledArray into a dictionary of detected tags by name: position
@@ -199,6 +204,8 @@ class LocalisationUsingKalmanFilter(Node):
                                             msg.pose.orientation.z, msg.pose.orientation.w])[2]
         self.real_laser_link_pose = [msg.pose.position.x, msg.pose.position.y, yaw]
 
+        self.state_after_prediction, self.cov_matrix_after_prediction = self.motion_update(self.state_after_prediction,self.control_input,self.time_step)
+
     
     def motion_update(self, state: np.ndarray, control_input: np.ndarray, time_step: float):
         """
@@ -206,13 +213,12 @@ class LocalisationUsingKalmanFilter(Node):
         Assuming state to be 3x1 and control input as velocity 3x1
         """
         
-        state_motion_prediction = np.array(state)
         F_k_1 = np.array([[1,0,0],[0,1,0],[0,0,1]])
         G_k_1 = np.zeros((3,3))
         G_k_1 = np.fill_diagonal(G_k_1,time_step)
 
-        x_k = F_k_1@state + G_k_1@control_input
-        P_k = F_k_1@self.cov_matrix@(F_k_1.T) + self.noise_density
+        x_k = F_k_1@state + G_k_1@control_input.T
+        P_k = F_k_1@self.cov_matrix_after_prediction@(F_k_1.T) + self.noise_density
 
 
         # TODO: control update
