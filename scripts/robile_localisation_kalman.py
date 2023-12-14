@@ -86,9 +86,9 @@ class LocalisationUsingKalmanFilter(Node):
 
         # State matrix:
         # position x, position y, heading position (yaw) theta,
-        self.state_after_prediction = np.array([0.0, 0.0, 0.0])
+        self.state = np.array([0.0, 0.0, 0.0])
         self.timestamp = {"sec": 0, "nanosec": 0}
-        self.cov_matrix_after_prediction = np.array([[0.001,0.0,0.0],[0.0,0.001,0.0],[0.,0.,0.001]])
+        self.cov_matrix = np.array([[0.001,0.0,0.0],[0.0,0.001,0.0],[0.,0.,0.001]])
         self.noise_density = np.eye(3,3)*0.1
         self.control_input = np.array([0.0,0.0,0.0])
 
@@ -181,15 +181,7 @@ class LocalisationUsingKalmanFilter(Node):
         return transform
     
  
-    def rfid_callback(self, msg: PositionLabelledArray, 
-                      kalman_filter_gain,
-                      estimated_pos,
-                      polar_tag_pos,
-                      measured_tag_polar_pos,
-                      measurement_cov,   #R
-                      state_cov  #P
-
-                      ):
+    def rfid_callback(self, msg: PositionLabelledArray):
         """
         Based on the detected RFID tags, performing measurement update
         """
@@ -213,21 +205,21 @@ class LocalisationUsingKalmanFilter(Node):
             known_tags_polar = self.convert_to_polar(known_tag_positions[:, :-1]).T
             measured_tags_polar = self.convert_to_polar(measured_tag_positions[:, :-1]).T
 
-        x,y,theta = estimated_pos.flatten()
-        r_i,alpha_i = measured_tag_polar_pos.flatten()
-        r_j,alpha_j = polar_tag_pos.flatten() 
+        x, y, theta = self.state.flatten()
+        r_i, alpha_i = measured_tags_polar[0,:], measured_tags_polar[1,:]
+        r_j, alpha_j = known_tags_polar[0,:], known_tags_polar[1,:]
 
-        v_t = [r_i, alpha_i].T -[r_j-(x *np.cos(alpha_j)+ y*np.sin(alpha_j)), (alpha_j-theta) ].T
+        v_t = measured_tags_polar -np.array([r_j-(x *np.cos(alpha_j)+ y*np.sin(alpha_j)), (alpha_j-theta) ]).reshape(2,-1)
 
         H = np.array([[0, 0, -1],[-np.cos(alpha_j),-np.sin(alpha_j), 0]])
 
-        sigma= H @ state_cov @ H.T + measurement_cov  #innovation covariance 
+        sigma= H @ self.cov_matrix @ H.T + measurement_cov  #innovation covariance , calc measurement_cov
 
-        self.x_t= estimated_pos + kalman_filter_gain @ v_t
+        kalman_gain = self.kalman_filter_gain
 
-        self.P_t= state_cov -kalman_filter_gain @ sigma @ kalman_filter_gain.T
+        self.state= self.state + kalman_gain @ v_t
 
-        return
+        self.cov_matrix= self.cov_matrix -kalman_gain @ sigma @ kalman_gain.T
 
 
     def real_base_link_pose_callback(self, msg: PoseStamped):
@@ -241,7 +233,7 @@ class LocalisationUsingKalmanFilter(Node):
                                             msg.pose.orientation.z, msg.pose.orientation.w])[2]
         self.real_laser_link_pose = [msg.pose.position.x, msg.pose.position.y, yaw]
 
-        self.state_after_prediction, self.cov_matrix_after_prediction = self.motion_update(self.state_after_prediction,self.control_input,self.time_step)
+        self.state, self.cov_matrix = self.motion_update(self.state,self.control_input,self.time_step)
 
     
     def motion_update(self, state: np.ndarray, control_input: np.ndarray, time_step: float):
@@ -255,7 +247,7 @@ class LocalisationUsingKalmanFilter(Node):
         G_k_1 = np.fill_diagonal(G_k_1,time_step)
 
         x_k = F_k_1@state + G_k_1@control_input.T
-        P_k = F_k_1@self.cov_matrix_after_prediction@(F_k_1.T) + self.noise_density
+        P_k = F_k_1@self.cov_matrix@(F_k_1.T) + self.noise_density
 
 
         # TODO: control update
