@@ -2,7 +2,7 @@
 
 import rclpy
 from rclpy.node import Node
-from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped
+from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped, TransformStamped
 from robile_interfaces.msg import PositionLabelled, PositionLabelledArray
 from nav_msgs.msg import Odometry
 import numpy as np
@@ -88,7 +88,7 @@ class LocalisationUsingKalmanFilter(Node):
         self.timestamp = {"sec": 0, "nanosec": 0}
 
         # Debug
-        self.debug = True
+        self.verbose = True
 
 
     def get_detected_tags(self, msg: PositionLabelledArray) -> dict[str, np.ndarray]:
@@ -125,7 +125,8 @@ class LocalisationUsingKalmanFilter(Node):
         return polar_position
 
 
-    def create_pose_from_state(self, state, covariance, frame_id, timestamp) -> PoseWithCovarianceStamped:
+    def create_pose_from_state(self, position, orientation,
+                               covariance, frame_id, timestamp) -> PoseWithCovarianceStamped:
         """
         Create a PoseWithCovarianceStamped object from given state and covariance matrices
         """
@@ -138,12 +139,13 @@ class LocalisationUsingKalmanFilter(Node):
         pose_cov.header.stamp.nanosec = timestamp["nanosec"]
 
         # Position
-        pose_cov.pose.pose.position.x = state[0]
-        pose_cov.pose.pose.position.y = state[1]
-        pose_cov.pose.pose.position.z = 0.0
+        pose_cov.pose.pose.position.x = position[0]
+        pose_cov.pose.pose.position.y = position[1]
+        pose_cov.pose.pose.position.z = position[2]
 
         # Orientation
-        state_quat = quaternion_from_euler(0.0, 0.0, state[2])
+        state_quat = \
+                quaternion_from_euler(orientation[0], orientation[1], orientation[2])
 
         pose_cov.pose.pose.orientation.x = state_quat[0]
         pose_cov.pose.pose.orientation.y = state_quat[1]
@@ -159,6 +161,17 @@ class LocalisationUsingKalmanFilter(Node):
         return pose_cov
 
 
+    def calculate_transform(self, target_frame, source_frame) -> TransformStamped:
+        transform: TransformStamped = \
+            self.tf_buffer.lookup_transform(target_frame, source_frame, rclpy.time.Time())
+
+        if self.verbose:
+            self.get_logger().info(f"transform btw target {target_frame} and " + \
+                                   f"source {source_frame}: {transform}")
+
+        return transform
+
+
     def rfid_callback(self, msg: PositionLabelledArray):
         """
         Based on the detected RFID tags, performing measurement update
@@ -167,7 +180,7 @@ class LocalisationUsingKalmanFilter(Node):
 
         detected_tags = self.get_detected_tags(msg)
 
-        if self.debug:
+        if self.verbose:
             self.get_logger().info(f"Detected tags: {detected_tags}")
 
         return
@@ -180,11 +193,13 @@ class LocalisationUsingKalmanFilter(Node):
 
         self.get_logger().info(f"real_base_link_pose msg: {msg}")
 
-        yaw = euler_from_quaternion([msg.pose.orientation.x, msg.pose.orientation.y, msg.pose.orientation.z, msg.pose.orientation.w])[2]
+        yaw = euler_from_quaternion([msg.pose.orientation.x, msg.pose.orientation.y,
+                                            msg.pose.orientation.z, msg.pose.orientation.w])[2]
         self.real_laser_link_pose = [msg.pose.position.x, msg.pose.position.y, yaw]
 
 
-    def motion_update(self, state: np.ndarray, cov_matrix: np.ndarray, control_input: np.ndarray, noise_density:np.ndarray, time_step: float):
+    def motion_update(self, state: np.ndarray, cov_matrix: np.ndarray, control_input: np.ndarray,
+                      noise_density:np.ndarray, time_step: float):
         """
         Update estimate of state with control input
         Assuming state to be 3x1 and control input as velocity 3x1
