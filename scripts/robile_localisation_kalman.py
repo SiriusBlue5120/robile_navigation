@@ -177,14 +177,35 @@ class LocalisationUsingKalmanFilter(Node):
                                    f"source {source_frame}: {transform}")
 
         return transform
+    
+ 
+    def rfid_callback(self, msg: PositionLabelledArray, 
+                      kalman_filter_gain,
+                      estimated_pos,
+                      polar_tag_pos,
+                      measured_tag_polar_pos,
+                      measurement_cov,   #R
+                      state_cov  #P
 
-
-    def rfid_callback(self, msg: PositionLabelledArray):
+                      ):
         """
         Based on the detected RFID tags, performing measurement update
         """
         ### YOUR CODE HERE ###
+        x,y,theta = estimated_pos.flatten()
+        r_i,alpha_i = measured_tag_polar_pos.flatten()
+        r_j,alpha_j = polar_tag_pos.flatten() 
 
+        v_t = [r_i, alpha_i].T -[r_j-(x *np.cos(alpha_j)+ y*np.sin(alpha_j)), (alpha_j-theta) ].T
+
+        H = np.array([[0, 0, -1],[-np.cos(alpha_j),-np.sin(alpha_j), 0]])
+
+        sigma= H @ state_cov @ H.T + measurement_cov  #innovation covariance 
+
+        self.x_t= estimated_pos + kalman_filter_gain @ v_t
+
+        self.P_t= state_cov -kalman_filter_gain @ sigma @ kalman_filter_gain.T
+ 
         detected_tags = self.get_detected_tags(msg)
 
         if self.verbose:
