@@ -69,7 +69,7 @@ class LocalisationUsingKalmanFilter(Node):
         # self.estimated_robot_pose_publisher = self.create_publisher(PoseStamped, self.estimated_base_link_pose_topic, 10)
         self.estimated_robot_pose_publisher = self.create_publisher(PoseWithCovarianceStamped, self.estimated_base_link_pose_topic, 10)
         self.cmd_vel_subscriber = self.create_subscription(Twist, '\cmd_vel', self.cmd_vel_callback, 10)
-       
+
         # setting up tf2 listener
         self.tf_buffer = tf2_ros.Buffer()
         self.tf_listener = tf2_ros.TransformListener(self.tf_buffer, self)
@@ -179,8 +179,8 @@ class LocalisationUsingKalmanFilter(Node):
                                    f"source {source_frame}: {transform}")
 
         return transform
-    
- 
+
+
     def rfid_callback(self, msg: PositionLabelledArray):
         """
         Based on the detected RFID tags, performing measurement update
@@ -193,7 +193,7 @@ class LocalisationUsingKalmanFilter(Node):
             self.get_logger().info(f"Detected tags: {detected_tags}")
 
         if len(detected_tags.keys()):
-            # Row matrices 
+            # Row matrices
             known_tag_positions = np.zeros((len(detected_tags.keys()), 3))
             measured_tag_positions = np.zeros((len(detected_tags.keys()), 3))
 
@@ -205,6 +205,7 @@ class LocalisationUsingKalmanFilter(Node):
             known_tags_polar = self.convert_to_polar(known_tag_positions[:, :-1]).T
             measured_tags_polar = self.convert_to_polar(measured_tag_positions[:, :-1]).T
 
+        # Measurement
         x, y, theta = self.state.flatten()
         r_i, alpha_i = measured_tags_polar[0,:], measured_tags_polar[1,:]
         r_j, alpha_j = known_tags_polar[0,:], known_tags_polar[1,:]
@@ -213,13 +214,16 @@ class LocalisationUsingKalmanFilter(Node):
 
         H = np.array([[0, 0, -1],[-np.cos(alpha_j),-np.sin(alpha_j), 0]])
 
-        sigma= H @ self.cov_matrix @ H.T + measurement_cov  #innovation covariance , calc measurement_cov
+        # TODO: measurement covariance
+        # Innovation covariance
+        sigma= H @ self.cov_matrix @ H.T + measurement_cov
 
         kalman_gain = self.kalman_filter_gain
 
-        self.state= self.state + kalman_gain @ v_t
+        # Estimation
+        self.state = self.state + kalman_gain @ v_t
 
-        self.cov_matrix= self.cov_matrix -kalman_gain @ sigma @ kalman_gain.T
+        self.cov_matrix = self.cov_matrix - kalman_gain @ sigma @ kalman_gain.T
 
 
     def real_base_link_pose_callback(self, msg: PoseStamped):
@@ -235,13 +239,25 @@ class LocalisationUsingKalmanFilter(Node):
 
         self.state, self.cov_matrix = self.motion_update(self.state,self.control_input,self.time_step)
 
-    
+        position = [self.state[0], self.state[1], 0.0]
+        orientation = [0.0, 0.0, self.state[2]]
+        covariance = np.zeros((36, 36))
+        timestamp = {
+                    "sec": msg.header.stamp.sec,
+                    "nanosec": msg.header.stamp.nanosec
+                    }
+
+        msg = self.create_pose_from_state(position, orientation, covariance, self.odom_frame, timestamp)
+
+        self.estimated_robot_pose_publisher.publish(msg)
+
+
     def motion_update(self, state: np.ndarray, control_input: np.ndarray, time_step: float):
         """
         Update estimate of state with control input
         Assuming state to be 3x1 and control input as velocity 3x1
         """
-        
+
         F_k_1 = np.array([[1,0,0],[0,1,0],[0,0,1]])
         G_k_1 = np.zeros((3,3))
         G_k_1 = np.fill_diagonal(G_k_1,time_step)
@@ -249,11 +265,10 @@ class LocalisationUsingKalmanFilter(Node):
         x_k = F_k_1@state + G_k_1@control_input.T
         P_k = F_k_1@self.cov_matrix@(F_k_1.T) + self.noise_density
 
-
         # TODO: control update
         return x_k,P_k
-        #return state_motion_prediction
-    
+
+
     def kalman_filter_gain (
                             cov_matrix : np.array,
                             measurement_matrix: np.array,
