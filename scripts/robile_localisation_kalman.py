@@ -73,7 +73,7 @@ class LocalisationUsingKalmanFilter(Node):
         # setting up tf2 listener
         self.tf_buffer = tf2_ros.Buffer()
         self.tf_listener = tf2_ros.TransformListener(self.tf_buffer, self)
-        self.time_step = 0.5
+        self.time_step = 0.1
 
         # Dict mapping tag names to their respective variable names
         self.tag_map = {
@@ -91,6 +91,9 @@ class LocalisationUsingKalmanFilter(Node):
         self.cov_matrix = np.array([[0.001,0.0,0.0],[0.0,0.001,0.0],[0.,0.,0.001]])
         self.noise_density = np.eye(3,3)*0.1
         self.control_input = np.array([0.0,0.0,0.0])
+
+        self.base_measurement_covariance = np.eye((2, 2)) * 0.01
+        self.measurement_noise = np.eye((2, 2)) * 0.01
 
         # Debug
         self.verbose = True
@@ -210,15 +213,19 @@ class LocalisationUsingKalmanFilter(Node):
         r_i, alpha_i = measured_tags_polar[0,:], measured_tags_polar[1,:]
         r_j, alpha_j = known_tags_polar[0,:], known_tags_polar[1,:]
 
-        v_t = measured_tags_polar -np.array([r_j-(x *np.cos(alpha_j)+ y*np.sin(alpha_j)), (alpha_j-theta) ]).reshape(2,-1)
+        # From testing, this does seem to work
+        v_t = measured_tags_polar - \
+            np.array([r_j - (x * np.cos(alpha_j) + y * np.sin(alpha_j)), (alpha_j - theta)]).reshape(2,-1)
 
         H = np.array([[0, 0, -1],[-np.cos(alpha_j),-np.sin(alpha_j), 0]])
 
-        # TODO: measurement covariance
-        # Innovation covariance
-        sigma= H @ self.cov_matrix @ H.T + measurement_cov
+        # TODO: proper measurement covariance
+        measurement_cov = self.base_measurement_covariance
 
-        kalman_gain = self.kalman_filter_gain
+        # Innovation covariance
+        sigma = H @ self.cov_matrix @ H.T + measurement_cov
+
+        kalman_gain = self.kalman_filter_gain(H, self.measurement_noise)
 
         # Estimation
         self.state = self.state + kalman_gain @ v_t
@@ -237,7 +244,8 @@ class LocalisationUsingKalmanFilter(Node):
                                             msg.pose.orientation.z, msg.pose.orientation.w])[2]
         self.real_laser_link_pose = [msg.pose.position.x, msg.pose.position.y, yaw]
 
-        self.state, self.cov_matrix = self.motion_update(self.state,self.control_input,self.time_step)
+        self.state, self.cov_matrix = \
+            self.motion_update(self.state, self.control_input, self.time_step)
 
         position = [self.state[0], self.state[1], 0.0]
         orientation = [0.0, 0.0, self.state[2]]
@@ -258,15 +266,15 @@ class LocalisationUsingKalmanFilter(Node):
         Assuming state to be 3x1 and control input as velocity 3x1
         """
 
+        # Control update
         F_k_1 = np.array([[1,0,0],[0,1,0],[0,0,1]])
         G_k_1 = np.zeros((3,3))
-        G_k_1 = np.fill_diagonal(G_k_1,time_step)
+        G_k_1 = np.fill_diagonal(G_k_1, time_step)
 
-        x_k = F_k_1@state + G_k_1@control_input.T
-        P_k = F_k_1@self.cov_matrix@(F_k_1.T) + self.noise_density
+        x_k = F_k_1 @ state + G_k_1 @ control_input.T
+        P_k = F_k_1 @ self.cov_matrix @ (F_k_1.T) + self.noise_density
 
-        # TODO: control update
-        return x_k,P_k
+        return x_k, P_k
 
 
     def kalman_filter_gain (
