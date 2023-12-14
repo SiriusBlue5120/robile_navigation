@@ -95,9 +95,11 @@ class LocalisationUsingKalmanFilter(Node):
         # Debug
         self.verbose = True
 
+
     def cmd_vel_callback(self, msg:Twist):
         self.control_input = np.array([msg.linear.x,msg.linear.y,msg.angular.z])
-        
+
+
     def get_detected_tags(self, msg: PositionLabelledArray) -> dict[str, np.ndarray]:
         """
         Parses PositionLabelledArray into a dictionary of detected tags by name: position
@@ -192,6 +194,25 @@ class LocalisationUsingKalmanFilter(Node):
         Based on the detected RFID tags, performing measurement update
         """
         ### YOUR CODE HERE ###
+
+        detected_tags = self.get_detected_tags(msg)
+
+        if self.verbose:
+            self.get_logger().info(f"Detected tags: {detected_tags}")
+
+        if len(detected_tags.keys()):
+            # Row matrices 
+            known_tag_positions = np.zeros((len(detected_tags.keys()), 3))
+            measured_tag_positions = np.zeros((len(detected_tags.keys()), 3))
+
+            for index, tag_name in enumerate(detected_tags.keys()):
+                known_tag_positions[index, :] = np.array(self.known_tags[tag_name])
+                measured_tag_positions[index, :] = detected_tags[tag_name]
+
+            # Now a column matrix of tags
+            known_tags_polar = self.convert_to_polar(known_tag_positions[:, :-1]).T
+            measured_tags_polar = self.convert_to_polar(measured_tag_positions[:, :-1]).T
+
         x,y,theta = estimated_pos.flatten()
         r_i,alpha_i = measured_tag_polar_pos.flatten()
         r_j,alpha_j = polar_tag_pos.flatten() 
@@ -205,11 +226,6 @@ class LocalisationUsingKalmanFilter(Node):
         self.x_t= estimated_pos + kalman_filter_gain @ v_t
 
         self.P_t= state_cov -kalman_filter_gain @ sigma @ kalman_filter_gain.T
- 
-        detected_tags = self.get_detected_tags(msg)
-
-        if self.verbose:
-            self.get_logger().info(f"Detected tags: {detected_tags}")
 
         return
 
