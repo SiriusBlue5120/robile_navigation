@@ -24,7 +24,7 @@ class LocalisationUsingKalmanFilter(Node):
             namespace='',
             parameters=[
                 ('map_frame', 'map'),
-                ('odom_frame', 'odom'),                
+                ('odom_frame', 'odom'),
                 ('laser_link_frame', 'base_laser_front_link'),
                 ('real_base_link_frame', 'real_base_link'),
                 ('scan_topic', 'scan'),
@@ -39,7 +39,7 @@ class LocalisationUsingKalmanFilter(Node):
                 ('rfid_tags.B', [0.,0.]),
                 ('rfid_tags.C', [0.,0.]),
                 ('rfid_tags.D', [0.,0.]),
-                ('rfid_tags.E', [0.,0.]),                        
+                ('rfid_tags.E', [0.,0.]),
             ])
 
         self.map_frame = self.get_parameter('map_frame').get_parameter_value().string_value
@@ -62,10 +62,13 @@ class LocalisationUsingKalmanFilter(Node):
 
         # setting up laser scan and rfid tag subscribers
         self.rfid_tag_subscriber = self.create_subscription(PositionLabelledArray, self.rfid_tag_poses_topic, self.rfid_callback, 10)
-        self.real_laser_link_subscriber = self.create_subscription(PoseStamped, self.real_base_link_pose_topic, self.real_base_link_pose_callback, 10)        
+        # Modifying name to be consistent
+        # self.real_laser_link_subscriber = self.create_subscription(PoseStamped, self.real_base_link_pose_topic, self.real_base_link_pose_callback, 10)
+        self.real_base_link_subscriber = self.create_subscription(PoseStamped, self.real_base_link_pose_topic, self.real_base_link_pose_callback, 10)
+        # Modifying as per assignment requirement
         # self.estimated_robot_pose_publisher = self.create_publisher(PoseStamped, self.estimated_base_link_pose_topic, 10)
         self.estimated_robot_pose_publisher = self.create_publisher(PoseWithCovarianceStamped, self.estimated_base_link_pose_topic, 10)
-        
+
         # setting up tf2 listener
         self.tf_buffer = tf2_ros.Buffer()
         self.tf_listener = tf2_ros.TransformListener(self.tf_buffer, self)
@@ -81,8 +84,7 @@ class LocalisationUsingKalmanFilter(Node):
 
         # State matrix:
         # position x, position y, heading position (yaw) theta,
-        # velocity x, velocity y, heading velocity (yaw) omega
-        self.state = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+        self.state = np.array([0.0, 0.0, 0.0])
         self.timestamp = {"sec": 0, "nanosec": 0}
 
         # Debug
@@ -96,14 +98,32 @@ class LocalisationUsingKalmanFilter(Node):
         detected_tags = {}
         for tag in msg.positions:
             tag: PositionLabelled
-                
+
             tag_name = tag.name
             tag_position = np.array([tag.position.x, tag.position.y, tag.position.z])
-            
+
             detected_tags.update({tag_name: tag_position})
 
         return detected_tags
-    
+
+
+    def convert_to_polar(self, cartesian_position: np.ndarray) -> np.ndarray:
+        """
+        Convert given 2D position array from cartesian to polar coordinates
+        """
+        assert cartesian_position.shape[-1] == 2, "Expected 2D cartesian coordinates"
+        assert len(cartesian_position.shape) <= 2,  "Expected array of 2D cartesian coordinates"
+
+        if len(cartesian_position.shape) == 1:
+            cartesian_position = cartesian_position[np.newaxis]
+
+        polar_position = np.zeros_like(cartesian_position)
+
+        polar_position[:, 0] = np.linalg.norm(cartesian_position[:, :], axis=1)
+        polar_position[:, 1] = np.arctan2(cartesian_position[:, 1], cartesian_position[:, 0])
+
+        return polar_position
+
 
     def create_pose_from_state(self, state, covariance, frame_id, timestamp) -> PoseWithCovarianceStamped:
         """
@@ -138,7 +158,7 @@ class LocalisationUsingKalmanFilter(Node):
 
         return pose_cov
 
- 
+
     def rfid_callback(self, msg: PositionLabelledArray):
         """
         Based on the detected RFID tags, performing measurement update
@@ -149,7 +169,7 @@ class LocalisationUsingKalmanFilter(Node):
 
         if self.debug:
             self.get_logger().info(f"Detected tags: {detected_tags}")
-        
+
         return
 
 
@@ -163,7 +183,7 @@ class LocalisationUsingKalmanFilter(Node):
         yaw = euler_from_quaternion([msg.pose.orientation.x, msg.pose.orientation.y, msg.pose.orientation.z, msg.pose.orientation.w])[2]
         self.real_laser_link_pose = [msg.pose.position.x, msg.pose.position.y, yaw]
 
-    
+
     def motion_update(self, state: np.ndarray, cov_matrix: np.ndarray, control_input: np.ndarray, noise_density:np.ndarray, time_step: float):
         """
         Update estimate of state with control input
@@ -178,13 +198,13 @@ class LocalisationUsingKalmanFilter(Node):
         x_k = F_k_1@state + G_k_1@control_input
         P_k = F_k_1@cov_matrix@(F_k_1.T) + noise_density
 
-        
+
         # TODO: control update
 
         #return state_motion_prediction
-        return x_k,P_k
-        #return state_motion_prediction
-    
+        return x_k, P_k
+
+
     def kalman_filter_gain (
                             cov_matrix : np.array,
                             measurement_matrix: np.array,
@@ -195,7 +215,7 @@ class LocalisationUsingKalmanFilter(Node):
         measurement_matrix @ cov_matrix @ measurement_matrix.T + measurement_noise)
 
         return kalman_gain
-    
+
 
 def main(args=None):
     rclpy.init(args=args)
