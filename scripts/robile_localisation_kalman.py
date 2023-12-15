@@ -76,13 +76,14 @@ class LocalisationUsingKalmanFilter(Node):
         self.time_step = 0.1
 
         # Dict mapping tag names to their respective variable names
-        self.tag_map = {
-            "A": self.rfid_tags_A,
-            "B": self.rfid_tags_B,
-            "C": self.rfid_tags_C,
-            "D": self.rfid_tags_D,
-            "E": self.rfid_tags_E
+        self.known_tags = {
+            "A": np.array(self.rfid_tags_A),
+            "B": np.array(self.rfid_tags_B),
+            "C": np.array(self.rfid_tags_C),
+            "D": np.array(self.rfid_tags_D),
+            "E": np.array(self.rfid_tags_E)
         }
+        self.tag_dim=2
 
         # State matrix:
         # position x, position y, heading position (yaw) theta,
@@ -194,21 +195,27 @@ class LocalisationUsingKalmanFilter(Node):
         ### YOUR CODE HERE ###
 
         detected_tags = self.get_detected_tags(msg)
-
+        num_tags=len(detected_tags.keys())
         if self.verbose:
             self.get_logger().info(f"Detected tags: {detected_tags}")
 
-        if len(detected_tags.keys()):
-            # Row matrices
-            known_tag_positions = np.zeros((len(detected_tags.keys()), 3))
-            measured_tag_positions = np.zeros((len(detected_tags.keys()), 3))
+        if num_tags:
+            known_tag_positions = np.zeros((num_tags*self.tag_dim, 1))
+            measured_tag_positions = np.zeros((num_tags*self.tag_dim, 1))
 
             for index, tag_name in enumerate(detected_tags.keys()):
-                known_tag_positions[index, :] = np.array(self.known_tags[tag_name])
-                measured_tag_positions[index, :] = detected_tags[tag_name]
+                known_tag_positions[index*self.tag_dim:index*self.tag_dim+2, :] = np.array(self.known_tags[tag_name])[:2][np.newaxis].T
+                measured_tag_positions[index*self.tag_dim:index*self.tag_dim+2, :] = detected_tags[tag_name][:2][np.newaxis].T    
 
             # Now a column matrix of tags
-            known_tags_polar = self.convert_to_polar(known_tag_positions[:, :-1]).T
+            
+            known_tags_polar = np.zeros(known_tag_positions.shape)
+            measured_tags_polar = np.zeros(measured_tag_positions.shape)
+            for index in range(num_tags):
+                known_tags_polar[self.tag_dim*index:self.tag_dim*index+2] = self.convert_to_polar(known_tag_positions[self.tag_dim*index:self.tag_dim*index+2].flatten()).T
+                measured_tags_polar[self.tag_dim*index:self.tag_dim*index+2] = self.convert_to_polar(measured_tag_positions[self.tag_dim*index:self.tag_dim*index+2].flatten()).T
+            
+            # to do 
             measured_tags_polar = self.convert_to_polar(measured_tag_positions[:, :-1]).T
 
         # Measurement
@@ -294,11 +301,11 @@ class LocalisationUsingKalmanFilter(Node):
     def kalman_filter_gain (
                             cov_matrix : np.array,
                             measurement_matrix: np.array,
-                            measurement_noise : np.array
+                            sigma: np.array
                             ):
 
-        kalman_gain = cov_matrix @ measurement_matrix.T @ np.linalg.inv(
-        measurement_matrix @ cov_matrix @ measurement_matrix.T + measurement_noise)
+        kalman_gain = cov_matrix @ measurement_matrix.T @ np.linalg.pinv(
+        sigma)
 
         return kalman_gain
 
