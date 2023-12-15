@@ -213,14 +213,17 @@ class LocalisationUsingKalmanFilter(Node):
 
         # Measurement
         x, y, theta = self.state.flatten()
+        # Measured tags
         r_i, alpha_i = measured_tags_polar[0,:], measured_tags_polar[1,:]
+        # Known tags
         r_j, alpha_j = known_tags_polar[0,:], known_tags_polar[1,:]
 
         # From testing, this does seem to work
         v_t = measured_tags_polar - \
             np.array([r_j - (x * np.cos(alpha_j) + y * np.sin(alpha_j)), (alpha_j - theta)]).reshape(2,-1)
 
-        H = np.array([[0, 0, -1],[-np.cos(alpha_j),-np.sin(alpha_j), 0]])
+        H = np.array([[               0,                0, -1], 
+                               [-np.cos(alpha_j), -np.sin(alpha_j),  0]])
 
         # TODO: proper measurement covariance
         measurement_cov = self.base_measurement_covariance
