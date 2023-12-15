@@ -89,9 +89,12 @@ class LocalisationUsingKalmanFilter(Node):
         self.state = np.array([0.0, 0.0, 0.0])
         self.timestamp = {"sec": 0, "nanosec": 0}
         self.cov_matrix = np.array([[0.001,0.0,0.0],[0.0,0.001,0.0],[0.,0.,0.001]])
-        self.noise_density = np.eye(3,3)*0.1
+
+        # Control parameters
+        self.pred_noise_density = np.eye(3)*0.01
         self.control_input = np.array([0.0,0.0,0.0])
 
+        # Measurement parameters
         self.base_measurement_covariance = np.eye((2, 2)) * 0.01
         self.measurement_noise = np.eye((2, 2)) * 0.01
 
@@ -245,7 +248,9 @@ class LocalisationUsingKalmanFilter(Node):
         self.real_laser_link_pose = [msg.pose.position.x, msg.pose.position.y, yaw]
 
         self.state, self.cov_matrix = \
-            self.motion_update(self.state, self.control_input, self.time_step)
+            self.motion_update(self.state, self.cov_matrix, 
+                               self.control_input, self.time_step,
+                               self.pred_noise_density)
 
         position = [self.state[0], self.state[1], 0.0]
         orientation = [0.0, 0.0, self.state[2]]
@@ -260,7 +265,9 @@ class LocalisationUsingKalmanFilter(Node):
         self.estimated_robot_pose_publisher.publish(msg)
 
 
-    def motion_update(self, state: np.ndarray, control_input: np.ndarray, time_step: float):
+    def motion_update(self, state: np.ndarray, cov_matrix: np.ndarray, 
+                      control_input: np.ndarray, time_step: float, 
+                      pred_noise_density: np.ndarray):
         """
         Update estimate of state with control input
         Assuming state to be 3x1 and control input as velocity 3x1
@@ -269,12 +276,16 @@ class LocalisationUsingKalmanFilter(Node):
         # Control update
         F_k_1 = np.array([[1,0,0],[0,1,0],[0,0,1]])
         G_k_1 = np.zeros((3,3))
-        G_k_1 = np.fill_diagonal(G_k_1, time_step)
+        # Fills diagonal in place
+        np.fill_diagonal(G_k_1, time_step)
 
-        x_k = F_k_1 @ state + G_k_1 @ control_input.T
-        P_k = F_k_1 @ self.cov_matrix @ (F_k_1.T) + self.noise_density
+        # Correcting matrix shapes
+        x_k = F_k_1 @ state[np.newaxis].T + G_k_1 @ control_input[np.newaxis].T
+        
+        P_k = F_k_1 @ cov_matrix @ F_k_1.T + pred_noise_density
 
-        return x_k, P_k
+        # Predicted state, prediction covariance
+        return x_k.flatten(), P_k
 
 
     def kalman_filter_gain (
