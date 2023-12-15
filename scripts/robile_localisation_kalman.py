@@ -96,7 +96,7 @@ class LocalisationUsingKalmanFilter(Node):
         self.control_input = np.array([0.0,0.0,0.0])
 
         # Measurement parameters
-        self.base_measurement_covariance = np.eye((2, 2)) * 0.01
+        self.base_measurement_covariance = np.eye(6) * 0.01
         self.measurement_noise = np.eye((2, 2)) * 0.01
 
         # Debug
@@ -229,8 +229,22 @@ class LocalisationUsingKalmanFilter(Node):
         v_t = measured_tags_polar - \
             np.array([r_j - (x * np.cos(alpha_j) + y * np.sin(alpha_j)), (alpha_j - theta)]).reshape(2,-1)
 
-        H = np.array([[               0,                0, -1], 
-                               [-np.cos(alpha_j), -np.sin(alpha_j),  0]])
+        H = np.zeros((2*num_tags, 3))
+
+
+        for index in range(num_tags):
+            
+            alpha_j = known_tags_polar[self.tag_dim*index+1][0]
+            r_j = known_tags_polar[self.tag_dim*index][0]
+
+            H_tag = np.array([
+                [0, 0, -1],
+                [-np.cos(alpha_j), -np.sin(alpha_j), 0]
+            ])
+            
+            
+            H[self.tag_dim*index:(self.tag_dim*index)+2, :] = H_tag
+
 
         # TODO: proper measurement covariance
         measurement_cov = self.base_measurement_covariance
@@ -241,7 +255,7 @@ class LocalisationUsingKalmanFilter(Node):
         kalman_gain = self.kalman_filter_gain(H, self.measurement_noise)
 
         # Estimation
-        self.state = self.state + kalman_gain @ v_t
+        self.state = (self.state[np.newaxis].T + kalman_gain @ v_t).flatten()
 
         self.cov_matrix = self.cov_matrix - kalman_gain @ sigma @ kalman_gain.T
 
