@@ -244,9 +244,6 @@ class LocalisationUsingKalmanFilter(Node):
         # Innovation
         v_t = measured_tags_polar - predicted_tags_polar
 
-        if self.verbose:
-            self.get_logger().info(f"Measurement innovation: {v_t}")
-
         # Jacobian of transformation matrix (H)
         H = np.zeros((self.tag_dim * num_tags, 3))
         for index in range(num_tags):
@@ -254,15 +251,18 @@ class LocalisationUsingKalmanFilter(Node):
             r_j = known_tags_polar[self.tag_dim * index][0]
             
             H[self.tag_dim * index:(self.tag_dim * index)+2, :] = np.array([
+                            [-np.cos(alpha_j), -np.sin(alpha_j), 0],
                             [0, 0, -1],
-                            [-np.cos(alpha_j), -np.sin(alpha_j), 0]
                         ])
 
         # Varying measurement noise with number of tags - more tags better
-        measurement_noise = np.eye(num_tags * self.tag_dim) * 0.01 / num_tags
+        measurement_noise = np.eye(num_tags * self.tag_dim) * 0.1 / num_tags
 
         # Innovation covariance
-        sigma: np.ndarray = H @ self.cov_matrix @ H.T + measurement_noise
+        sigma: np.ndarray = H @ self.cov_matrix @ np.transpose(H) + measurement_noise
+
+        # Validation gate
+        v_g = v_t.T @ np.linalg.inv(sigma) @ v_t
 
         # Kalman gain
         kalman_gain: np.ndarray = self.kalman_filter_gain(self.cov_matrix, H, sigma)
@@ -274,7 +274,14 @@ class LocalisationUsingKalmanFilter(Node):
         if self.verbose:
             # self.get_logger().info(f"Publishing estimated pose: {msg}")
             self.get_logger().info(f"Estimated state: {self.state}")
-            self.get_logger().info(f"Estimated covariance: {self.cov_matrix}")
+            self.get_logger().info(f"Estimated covariance: \n{self.cov_matrix}")
+            # self.get_logger().info(f"Estimated sigma: \n{sigma}")
+            # self.get_logger().info(f"Measurement innovation: \n{v_t}")
+            # self.get_logger().info(f"Gain * innovation: \n{kalman_gain @ v_t}")
+            # self.get_logger().info(f"H matrix: \n{H}")
+            # self.get_logger().info(f"Innovation gate: {v_g}")
+            # self.get_logger().info(f"Kalman gain: \n{kalman_gain}")
+            # self.get_logger().info(f"Sigma inverse: \n{np.linalg.inv(sigma)}")
 
 
     def real_base_link_pose_callback(self, msg: PoseStamped):
@@ -322,9 +329,9 @@ class LocalisationUsingKalmanFilter(Node):
         
         if self.verbose:
             # self.get_logger().info(f"Publishing estimated pose: {msg}")
-            self.get_logger().info(f"Estimated position: {position}")
-            self.get_logger().info(f"Estimated position: {orientation}")
-            self.get_logger().info(f"Estimated position: {covariance}")
+            self.get_logger().info(f"Estimated state: {self.state}")
+            # self.get_logger().info(f"Estimated orientation: {orientation}")
+            self.get_logger().info(f"Estimated covariance: {self.cov_matrix}")
 
         self.estimated_robot_pose_publisher.publish(msg)
 
@@ -337,7 +344,7 @@ class LocalisationUsingKalmanFilter(Node):
         Assuming state to be 3x1 and control input as velocity 3x1
         """
         # Control update
-        F_k_1 = np.array([[1, 0, 0],[0, 1, 0],[0, 0, 1]])
+        F_k_1 = np.array([[1.0, 0.0, 0.0],[0.0, 1.0, 0.0],[0.0, 0.0, 1.0]])
         G_k_1 = np.zeros((3, 3))
         np.fill_diagonal(G_k_1, time_step)
 
@@ -350,8 +357,8 @@ class LocalisationUsingKalmanFilter(Node):
 
     def kalman_filter_gain (self, cov_matrix : np.array, measurement_matrix: np.array,
                             sigma: np.array) -> np.ndarray:
-
-        kalman_gain: np.ndarray = cov_matrix @ measurement_matrix.T @ np.linalg.pinv(sigma)
+    
+        kalman_gain: np.ndarray = cov_matrix @ measurement_matrix.T @ np.linalg.inv(sigma)
 
         return kalman_gain
 
