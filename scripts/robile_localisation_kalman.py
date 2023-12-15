@@ -64,6 +64,8 @@ class LocalisationUsingKalmanFilter(Node):
         self.rfid_tags_D = self.get_parameter('rfid_tags.D').get_parameter_value().double_array_value
         self.rfid_tags_E = self.get_parameter('rfid_tags.E').get_parameter_value().double_array_value
 
+        self.cmd_vel_topic = "cmd_vel"
+
         # setting up laser scan and rfid tag subscribers
         self.rfid_tag_subscriber = self.create_subscription(PositionLabelledArray, self.rfid_tag_poses_topic, self.rfid_callback, 10)
         # Modifying name to be consistent
@@ -72,7 +74,7 @@ class LocalisationUsingKalmanFilter(Node):
         # Modifying as per assignment requirement
         # self.estimated_robot_pose_publisher = self.create_publisher(PoseStamped, self.estimated_base_link_pose_topic, 10)
         self.estimated_robot_pose_publisher = self.create_publisher(PoseWithCovarianceStamped, self.estimated_base_link_pose_topic, 10)
-        self.cmd_vel_subscriber = self.create_subscription(Twist, '\cmd_vel', self.cmd_vel_callback, 10)
+        self.cmd_vel_subscriber = self.create_subscription(Twist, self.cmd_vel_topic, self.cmd_vel_callback, 10)
 
         # setting up tf2 listener
         self.tf_buffer = tf2_ros.Buffer()
@@ -101,9 +103,6 @@ class LocalisationUsingKalmanFilter(Node):
         # Control parameters
         self.pred_noise = np.eye(3)*0.01
         self.control_input = np.array([0.0, 0.0, 0.0])
-
-        # Measurement parameters
-        self.measurement_noise = np.eye(6) * 0.01
 
         # Debug
         self.verbose = True
@@ -197,6 +196,9 @@ class LocalisationUsingKalmanFilter(Node):
         """
         ### YOUR CODE HERE ###
 
+        # if True:
+        #     return 
+        
         detected_tags = self.get_detected_tags(msg)
         num_tags = len(detected_tags.keys())
 
@@ -242,6 +244,9 @@ class LocalisationUsingKalmanFilter(Node):
         # Innovation
         v_t = measured_tags_polar - predicted_tags_polar
 
+        if self.verbose:
+            self.get_logger().info(f"Measurement innovation: {v_t}")
+
         # Jacobian of transformation matrix (H)
         H = np.zeros((self.tag_dim * num_tags, 3))
         for index in range(num_tags):
@@ -254,7 +259,7 @@ class LocalisationUsingKalmanFilter(Node):
                         ])
 
         # Varying measurement noise with number of tags - more tags better
-        measurement_noise = self.measurement_noise / num_tags
+        measurement_noise = np.eye(num_tags * self.tag_dim) * 0.01 / num_tags
 
         # Innovation covariance
         sigma: np.ndarray = H @ self.cov_matrix @ H.T + measurement_noise
@@ -265,6 +270,11 @@ class LocalisationUsingKalmanFilter(Node):
         # Updating state and covariance with measurement
         self.state: np.ndarray = (self.state[np.newaxis].T + kalman_gain @ v_t).flatten()
         self.cov_matrix: np.ndarray = self.cov_matrix - kalman_gain @ sigma @ kalman_gain.T
+
+        if self.verbose:
+            # self.get_logger().info(f"Publishing estimated pose: {msg}")
+            self.get_logger().info(f"Estimated state: {self.state}")
+            self.get_logger().info(f"Estimated covariance: {self.cov_matrix}")
 
 
     def real_base_link_pose_callback(self, msg: PoseStamped):
@@ -277,9 +287,15 @@ class LocalisationUsingKalmanFilter(Node):
                                             msg.pose.orientation.z, msg.pose.orientation.w])[2]
         self.real_laser_link_pose = [msg.pose.position.x, msg.pose.position.y, yaw]
 
-        time_step = time.time() - self.previous_pred_time
+        current_time = time.time()
+        time_step = current_time - self.previous_pred_time
+        self.previous_pred_time = current_time
+
         if time_step > self.time_to_reset:
             time_step = self.time_to_reset
+
+        if self.verbose:
+            self.get_logger().info(f"Current time step: {time_step}")
 
         self.state, self.cov_matrix = \
             self.motion_update(self.state, self.cov_matrix, 
@@ -303,6 +319,12 @@ class LocalisationUsingKalmanFilter(Node):
         # Craft correct covariance from computed covariance
         msg = self.create_pose_from_state(position, orientation, covariance, 
                                           self.odom_frame, self.timestamp)
+        
+        if self.verbose:
+            # self.get_logger().info(f"Publishing estimated pose: {msg}")
+            self.get_logger().info(f"Estimated position: {position}")
+            self.get_logger().info(f"Estimated position: {orientation}")
+            self.get_logger().info(f"Estimated position: {covariance}")
 
         self.estimated_robot_pose_publisher.publish(msg)
 
