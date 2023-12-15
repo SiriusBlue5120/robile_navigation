@@ -197,8 +197,8 @@ class LocalisationUsingKalmanFilter(Node):
         ### YOUR CODE HERE ###
 
         # if True:
-        #     return 
-        
+        #     return
+
         detected_tags = self.get_detected_tags(msg)
         num_tags = len(detected_tags.keys())
 
@@ -217,7 +217,7 @@ class LocalisationUsingKalmanFilter(Node):
             known_tag_positions[index * self.tag_dim : index * self.tag_dim+2, :] = \
                 np.array(self.known_tags[tag_name])[:2][np.newaxis].T
             measured_tag_positions[index * self.tag_dim : index * self.tag_dim+2, :] = \
-                detected_tags[tag_name][:2][np.newaxis].T    
+                detected_tags[tag_name][:2][np.newaxis].T
 
         # Crafting matrix of tags in polar coordinates
         known_tags_polar = np.zeros(known_tag_positions.shape)
@@ -249,7 +249,7 @@ class LocalisationUsingKalmanFilter(Node):
         for index in range(num_tags):
             alpha_j = known_tags_polar[self.tag_dim * index+1][0]
             r_j = known_tags_polar[self.tag_dim * index][0]
-            
+
             H[self.tag_dim * index:(self.tag_dim * index)+2, :] = np.array([
                             [-np.cos(alpha_j), -np.sin(alpha_j), 0],
                             [0, 0, -1],
@@ -305,7 +305,7 @@ class LocalisationUsingKalmanFilter(Node):
             self.get_logger().info(f"Current time step: {time_step}")
 
         self.state, self.cov_matrix = \
-            self.motion_update(self.state, self.cov_matrix, 
+            self.motion_update(self.state, self.cov_matrix,
                                self.control_input, time_step,
                                self.pred_noise)
 
@@ -324,9 +324,9 @@ class LocalisationUsingKalmanFilter(Node):
                     }
 
         # Craft correct covariance from computed covariance
-        msg = self.create_pose_from_state(position, orientation, covariance, 
+        msg = self.create_pose_from_state(position, orientation, covariance,
                                           self.odom_frame, self.timestamp)
-        
+
         if self.verbose:
             # self.get_logger().info(f"Publishing estimated pose: {msg}")
             self.get_logger().info(f"Estimated state: {self.state}")
@@ -336,8 +336,8 @@ class LocalisationUsingKalmanFilter(Node):
         self.estimated_robot_pose_publisher.publish(msg)
 
 
-    def motion_update(self, state: np.ndarray, cov_matrix: np.ndarray, 
-                      control_input: np.ndarray, time_step: float, 
+    def motion_update(self, state: np.ndarray, cov_matrix: np.ndarray,
+                      control_input: np.ndarray, time_step: float,
                       pred_noise: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         """
         Update estimate of state with control input
@@ -357,7 +357,7 @@ class LocalisationUsingKalmanFilter(Node):
 
     def kalman_filter_gain (self, cov_matrix : np.array, measurement_matrix: np.array,
                             sigma: np.array) -> np.ndarray:
-    
+
         kalman_gain: np.ndarray = cov_matrix @ measurement_matrix.T @ np.linalg.inv(sigma)
 
         return kalman_gain
@@ -373,6 +373,7 @@ def main(args=None):
     finally:
         localisation_using_kalman_filter.destroy_node()
         rclpy.shutdown()
+
 
 if __name__ == '__main__':
     main()
