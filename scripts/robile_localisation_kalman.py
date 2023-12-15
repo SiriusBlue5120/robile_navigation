@@ -195,55 +195,55 @@ class LocalisationUsingKalmanFilter(Node):
         ### YOUR CODE HERE ###
 
         detected_tags = self.get_detected_tags(msg)
-        num_tags=len(detected_tags.keys())
+        num_tags = len(detected_tags.keys())
+
         if self.verbose:
             self.get_logger().info(f"Detected tags: {detected_tags}")
 
         if num_tags:
-            known_tag_positions = np.zeros((num_tags*self.tag_dim, 1))
-            measured_tag_positions = np.zeros((num_tags*self.tag_dim, 1))
+            known_tag_positions = np.zeros((num_tags * self.tag_dim, 1))
+            measured_tag_positions = np.zeros((num_tags * self.tag_dim, 1))
 
             for index, tag_name in enumerate(detected_tags.keys()):
-                known_tag_positions[index*self.tag_dim:index*self.tag_dim+2, :] = np.array(self.known_tags[tag_name])[:2][np.newaxis].T
-                measured_tag_positions[index*self.tag_dim:index*self.tag_dim+2, :] = detected_tags[tag_name][:2][np.newaxis].T    
+                known_tag_positions[index * self.tag_dim : index * self.tag_dim+2, :] = np.array(self.known_tags[tag_name])[:2][np.newaxis].T
+                measured_tag_positions[index * self.tag_dim : index * self.tag_dim+2, :] = detected_tags[tag_name][:2][np.newaxis].T    
 
             # Now a column matrix of tags
             
             known_tags_polar = np.zeros(known_tag_positions.shape)
             measured_tags_polar = np.zeros(measured_tag_positions.shape)
             for index in range(num_tags):
-                known_tags_polar[self.tag_dim*index:self.tag_dim*index+2] = self.convert_to_polar(known_tag_positions[self.tag_dim*index:self.tag_dim*index+2].flatten()).T
-                measured_tags_polar[self.tag_dim*index:self.tag_dim*index+2] = self.convert_to_polar(measured_tag_positions[self.tag_dim*index:self.tag_dim*index+2].flatten()).T
+                known_tags_polar[self.tag_dim * index : self.tag_dim * index + 2] = \
+                    self.convert_to_polar(known_tag_positions[self.tag_dim * index : self.tag_dim * index + 2].flatten()).T
+                measured_tags_polar[self.tag_dim * index : self.tag_dim * index + 2] = \
+                    self.convert_to_polar(measured_tag_positions[self.tag_dim * index : self.tag_dim * index + 2].flatten()).T
             
             # to do 
             measured_tags_polar = self.convert_to_polar(measured_tag_positions[:, :-1]).T
 
         # Measurement
         x, y, theta = self.state.flatten()
-        # Measured tags
-        r_i, alpha_i = measured_tags_polar[0,:], measured_tags_polar[1,:]
-        # Known tags
-        r_j, alpha_j = known_tags_polar[0,:], known_tags_polar[1,:]
 
-        # From testing, this does seem to work
-        v_t = measured_tags_polar - \
-            np.array([r_j - (x * np.cos(alpha_j) + y * np.sin(alpha_j)), (alpha_j - theta)]).reshape(2,-1)
-
-        H = np.zeros((2*num_tags, 3))
-
-
+        predicted_tags_polar = np.zeros((self.tag_dim * num_tags, 1))
         for index in range(num_tags):
-            
-            alpha_j = known_tags_polar[self.tag_dim*index+1][0]
-            r_j = known_tags_polar[self.tag_dim*index][0]
+            alpha_j = known_tags_polar[self.tag_dim * index + 1][0]
+            r_j = known_tags_polar[self.tag_dim * index][0]
 
-            H_tag = np.array([
-                [0, 0, -1],
-                [-np.cos(alpha_j), -np.sin(alpha_j), 0]
-            ])
+            predicted_tags_polar[self.tag_dim * index : self.tag_dim * index+2] = \
+                np.array([[r_j - (x * np.cos(alpha_j) + y * np.sin(alpha_j))],
+                          [alpha_j - theta]])
+
+        v_t = measured_tags_polar - predicted_tags_polar
+
+        H = np.zeros((self.tag_dim * num_tags, 3))
+        for index in range(num_tags):
+            alpha_j = known_tags_polar[self.tag_dim * index+1][0]
+            r_j = known_tags_polar[self.tag_dim * index][0]
             
-            
-            H[self.tag_dim*index:(self.tag_dim*index)+2, :] = H_tag
+            H[self.tag_dim * index:(self.tag_dim * index)+2, :] = np.array([
+                            [0, 0, -1],
+                            [-np.cos(alpha_j), -np.sin(alpha_j), 0]
+                        ])
 
 
         # TODO: proper measurement covariance
@@ -264,7 +264,6 @@ class LocalisationUsingKalmanFilter(Node):
         """
         Updating the base_link pose based on the update in robile_rfid_tag_finder.py
         """
-
         self.get_logger().info(f"real_base_link_pose msg: {msg}")
 
         yaw = euler_from_quaternion([msg.pose.orientation.x, msg.pose.orientation.y,
@@ -284,6 +283,7 @@ class LocalisationUsingKalmanFilter(Node):
                     "nanosec": msg.header.stamp.nanosec
                     }
 
+        # Craft correct covariance from computed covariance
         msg = self.create_pose_from_state(position, orientation, covariance, self.odom_frame, timestamp)
 
         self.estimated_robot_pose_publisher.publish(msg)
@@ -296,7 +296,6 @@ class LocalisationUsingKalmanFilter(Node):
         Update estimate of state with control input
         Assuming state to be 3x1 and control input as velocity 3x1
         """
-
         # Control update
         F_k_1 = np.array([[1,0,0],[0,1,0],[0,0,1]])
         G_k_1 = np.zeros((3,3))
@@ -312,14 +311,11 @@ class LocalisationUsingKalmanFilter(Node):
         return x_k.flatten(), P_k
 
 
-    def kalman_filter_gain (
-                            cov_matrix : np.array,
+    def kalman_filter_gain (cov_matrix : np.array,
                             measurement_matrix: np.array,
-                            sigma: np.array
-                            ):
+                            sigma: np.array) -> np.ndarray:
 
-        kalman_gain = cov_matrix @ measurement_matrix.T @ np.linalg.pinv(
-        sigma)
+        kalman_gain: np.ndarray = cov_matrix @ measurement_matrix.T @ np.linalg.pinv(sigma)
 
         return kalman_gain
 
