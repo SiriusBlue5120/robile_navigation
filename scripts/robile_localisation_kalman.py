@@ -285,7 +285,7 @@ class LocalisationUsingKalmanFilter(Node):
         # Correcting matrix shapes
         x_k = F_k_1 @ state[np.newaxis].T + G_k_1 @ control_input[np.newaxis].T
         
-        P_k = F_k_1 @ cov_matrix @ F_k_1[np.newaxis].T + pred_noise_density
+        P_k = F_k_1 @ cov_matrix @ np.transpose(F_k_1) + pred_noise_density
 
         # Predicted state, prediction covariance
         return x_k.flatten(), P_k
