@@ -1,13 +1,17 @@
 #!/usr/bin/env python3
 
-import rclpy
-from rclpy.node import Node
-from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped, TransformStamped, Twist
-from robile_interfaces.msg import PositionLabelled, PositionLabelledArray
-from nav_msgs.msg import Odometry
+import time
+
 import numpy as np
+import rclpy
 import tf2_ros
+from geometry_msgs.msg import (PoseStamped, PoseWithCovarianceStamped,
+                               TransformStamped, Twist)
+# from nav_msgs.msg import Odometry
+from rclpy.node import Node
 from tf_transformations import euler_from_quaternion, quaternion_from_euler
+
+from robile_interfaces.msg import PositionLabelled, PositionLabelledArray
 
 
 class LocalisationUsingKalmanFilter(Node):
@@ -73,7 +77,6 @@ class LocalisationUsingKalmanFilter(Node):
         # setting up tf2 listener
         self.tf_buffer = tf2_ros.Buffer()
         self.tf_listener = tf2_ros.TransformListener(self.tf_buffer, self)
-        self.time_step = 0.1
 
         # Dict mapping tag names to their respective variable names
         self.known_tags = {
@@ -83,21 +86,24 @@ class LocalisationUsingKalmanFilter(Node):
             "D": np.array(self.rfid_tags_D),
             "E": np.array(self.rfid_tags_E)
         }
-        self.tag_dim=2
+        self.tag_dim = 2
 
         # State matrix:
         # position x, position y, heading position (yaw) theta,
         self.state = np.array([0.0, 0.0, 0.0])
+        self.cov_matrix = np.eye(3) * 0.001
         self.timestamp = {"sec": 0, "nanosec": 0}
-        self.cov_matrix = np.array([[0.001,0.0,0.0],[0.0,0.001,0.0],[0.,0.,0.001]])
+
+        # Timing
+        self.previous_pred_time = time.time()
+        self.time_to_reset = 0.2
 
         # Control parameters
-        self.pred_noise_density = np.eye(3)*0.01
-        self.control_input = np.array([0.0,0.0,0.0])
+        self.pred_noise = np.eye(3)*0.01
+        self.control_input = np.array([0.0, 0.0, 0.0])
 
         # Measurement parameters
-        self.base_measurement_covariance = np.eye(6) * 0.01
-        self.measurement_noise = np.eye((2, 2)) * 0.01
+        self.measurement_noise = np.eye(6) * 0.01
 
         # Debug
         self.verbose = True
@@ -169,10 +175,7 @@ class LocalisationUsingKalmanFilter(Node):
         pose_cov.pose.pose.orientation.w = state_quat[3]
 
         # Covariance
-        # TODO: Modify this to use the correct covariance
-        # Zero for now
-        state_covariance = np.zeros_like(pose_cov.pose.covariance)
-        pose_cov.pose.covariance = state_covariance
+        pose_cov.pose.covariance = covariance.flatten()
 
         return pose_cov
 
@@ -197,33 +200,36 @@ class LocalisationUsingKalmanFilter(Node):
         detected_tags = self.get_detected_tags(msg)
         num_tags = len(detected_tags.keys())
 
+        if not num_tags:
+            self.get_logger().info("No tags were detected. Skipping measurement update")
+
+            return
+
         if self.verbose:
             self.get_logger().info(f"Detected tags: {detected_tags}")
 
-        if num_tags:
-            known_tag_positions = np.zeros((num_tags * self.tag_dim, 1))
-            measured_tag_positions = np.zeros((num_tags * self.tag_dim, 1))
+        # Crafting matrix  of tags
+        known_tag_positions = np.zeros((num_tags * self.tag_dim, 1))
+        measured_tag_positions = np.zeros((num_tags * self.tag_dim, 1))
+        for index, tag_name in enumerate(detected_tags.keys()):
+            known_tag_positions[index * self.tag_dim : index * self.tag_dim+2, :] = \
+                np.array(self.known_tags[tag_name])[:2][np.newaxis].T
+            measured_tag_positions[index * self.tag_dim : index * self.tag_dim+2, :] = \
+                detected_tags[tag_name][:2][np.newaxis].T    
 
-            for index, tag_name in enumerate(detected_tags.keys()):
-                known_tag_positions[index * self.tag_dim : index * self.tag_dim+2, :] = np.array(self.known_tags[tag_name])[:2][np.newaxis].T
-                measured_tag_positions[index * self.tag_dim : index * self.tag_dim+2, :] = detected_tags[tag_name][:2][np.newaxis].T    
+        # Crafting matrix of tags in polar coordinates
+        known_tags_polar = np.zeros(known_tag_positions.shape)
+        measured_tags_polar = np.zeros(measured_tag_positions.shape)
+        for index in range(num_tags):
+            known_tags_polar[self.tag_dim * index : self.tag_dim * index + 2] = \
+                self.convert_to_polar(known_tag_positions[self.tag_dim * index : self.tag_dim * index + 2].flatten()).T
+            measured_tags_polar[self.tag_dim * index : self.tag_dim * index + 2] = \
+                self.convert_to_polar(measured_tag_positions[self.tag_dim * index : self.tag_dim * index + 2].flatten()).T
 
-            # Now a column matrix of tags
-            
-            known_tags_polar = np.zeros(known_tag_positions.shape)
-            measured_tags_polar = np.zeros(measured_tag_positions.shape)
-            for index in range(num_tags):
-                known_tags_polar[self.tag_dim * index : self.tag_dim * index + 2] = \
-                    self.convert_to_polar(known_tag_positions[self.tag_dim * index : self.tag_dim * index + 2].flatten()).T
-                measured_tags_polar[self.tag_dim * index : self.tag_dim * index + 2] = \
-                    self.convert_to_polar(measured_tag_positions[self.tag_dim * index : self.tag_dim * index + 2].flatten()).T
-            
-            # to do 
-            measured_tags_polar = self.convert_to_polar(measured_tag_positions[:, :-1]).T
-
-        # Measurement
+        # Measurement update
         x, y, theta = self.state.flatten()
 
+        # Transform known tags into robot frame (using h)
         predicted_tags_polar = np.zeros((self.tag_dim * num_tags, 1))
         for index in range(num_tags):
             alpha_j = known_tags_polar[self.tag_dim * index + 1][0]
@@ -233,8 +239,10 @@ class LocalisationUsingKalmanFilter(Node):
                 np.array([[r_j - (x * np.cos(alpha_j) + y * np.sin(alpha_j))],
                           [alpha_j - theta]])
 
+        # Innovation
         v_t = measured_tags_polar - predicted_tags_polar
 
+        # Jacobian of transformation matrix (H)
         H = np.zeros((self.tag_dim * num_tags, 3))
         for index in range(num_tags):
             alpha_j = known_tags_polar[self.tag_dim * index+1][0]
@@ -245,19 +253,18 @@ class LocalisationUsingKalmanFilter(Node):
                             [-np.cos(alpha_j), -np.sin(alpha_j), 0]
                         ])
 
-
-        # TODO: proper measurement covariance
-        measurement_cov = self.base_measurement_covariance
+        # Varying measurement noise with number of tags - more tags better
+        measurement_noise = self.measurement_noise / num_tags
 
         # Innovation covariance
-        sigma = H @ self.cov_matrix @ H.T + measurement_cov
+        sigma: np.ndarray = H @ self.cov_matrix @ H.T + measurement_noise
 
-        kalman_gain = self.kalman_filter_gain(H, self.measurement_noise)
+        # Kalman gain
+        kalman_gain: np.ndarray = self.kalman_filter_gain(self.cov_matrix, H, sigma)
 
-        # Estimation
-        self.state = (self.state[np.newaxis].T + kalman_gain @ v_t).flatten()
-
-        self.cov_matrix = self.cov_matrix - kalman_gain @ sigma @ kalman_gain.T
+        # Updating state and covariance with measurement
+        self.state: np.ndarray = (self.state[np.newaxis].T + kalman_gain @ v_t).flatten()
+        self.cov_matrix: np.ndarray = self.cov_matrix - kalman_gain @ sigma @ kalman_gain.T
 
 
     def real_base_link_pose_callback(self, msg: PoseStamped):
@@ -270,49 +277,56 @@ class LocalisationUsingKalmanFilter(Node):
                                             msg.pose.orientation.z, msg.pose.orientation.w])[2]
         self.real_laser_link_pose = [msg.pose.position.x, msg.pose.position.y, yaw]
 
+        time_step = time.time() - self.previous_pred_time
+        if time_step > self.time_to_reset:
+            time_step = self.time_to_reset
+
         self.state, self.cov_matrix = \
             self.motion_update(self.state, self.cov_matrix, 
-                               self.control_input, self.time_step,
-                               self.pred_noise_density)
+                               self.control_input, time_step,
+                               self.pred_noise)
 
         position = [self.state[0], self.state[1], 0.0]
         orientation = [0.0, 0.0, self.state[2]]
-        covariance = np.zeros((36, 36))
-        timestamp = {
+
+        covariance = np.zeros((6, 6))
+        covariance[:2, :2] = self.cov_matrix[:2, :2]
+        covariance[-1, -1] = self.cov_matrix[-1, -1]
+        covariance[-1, :2] = self.cov_matrix[-1, :2]
+        covariance[:2, -1] = self.cov_matrix[:2, -1]
+
+        self.timestamp = {
                     "sec": msg.header.stamp.sec,
                     "nanosec": msg.header.stamp.nanosec
                     }
 
         # Craft correct covariance from computed covariance
-        msg = self.create_pose_from_state(position, orientation, covariance, self.odom_frame, timestamp)
+        msg = self.create_pose_from_state(position, orientation, covariance, 
+                                          self.odom_frame, self.timestamp)
 
         self.estimated_robot_pose_publisher.publish(msg)
 
 
     def motion_update(self, state: np.ndarray, cov_matrix: np.ndarray, 
                       control_input: np.ndarray, time_step: float, 
-                      pred_noise_density: np.ndarray):
+                      pred_noise: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         """
         Update estimate of state with control input
         Assuming state to be 3x1 and control input as velocity 3x1
         """
         # Control update
-        F_k_1 = np.array([[1,0,0],[0,1,0],[0,0,1]])
-        G_k_1 = np.zeros((3,3))
-        # Fills diagonal in place
+        F_k_1 = np.array([[1, 0, 0],[0, 1, 0],[0, 0, 1]])
+        G_k_1 = np.zeros((3, 3))
         np.fill_diagonal(G_k_1, time_step)
 
-        # Correcting matrix shapes
+        # State and covariance prediction
         x_k = F_k_1 @ state[np.newaxis].T + G_k_1 @ control_input[np.newaxis].T
-        
-        P_k = F_k_1 @ cov_matrix @ np.transpose(F_k_1) + pred_noise_density
+        P_k = F_k_1 @ cov_matrix @ np.transpose(F_k_1) + pred_noise
 
-        # Predicted state, prediction covariance
         return x_k.flatten(), P_k
 
 
-    def kalman_filter_gain (cov_matrix : np.array,
-                            measurement_matrix: np.array,
+    def kalman_filter_gain (self, cov_matrix : np.array, measurement_matrix: np.array,
                             sigma: np.array) -> np.ndarray:
 
         kalman_gain: np.ndarray = cov_matrix @ measurement_matrix.T @ np.linalg.pinv(sigma)
