@@ -10,7 +10,9 @@ Panels:
         - /Map1
         - /ParticleCloud1
         - /ParticleCloud1/Topic1
-        - /Map2
+        - /Path1
+        - /Map3
+        - /PoseWithCovariance1
       Splitter Ratio: 0.5
     Tree Height: 719
   - Class: rviz_common/Selection
@@ -177,98 +179,19 @@ Visualization Manager:
       Value: true
       Visual Enabled: true
     - Class: rviz_default_plugins/TF
-      Enabled: true
+      Enabled: false
       Frame Timeout: 15
       Frames:
         All Enabled: true
-        base_footprint:
-          Value: true
-        base_laser_front_link:
-          Value: true
-        base_link:
-          Value: true
-        map:
-          Value: true
-        odom:
-          Value: true
-        robile_1_drive_left_hub_wheel_link:
-          Value: true
-        robile_1_drive_pivot_link:
-          Value: true
-        robile_1_drive_right_hub_wheel_link:
-          Value: true
-        robile_1_link:
-          Value: true
-        robile_2_drive_left_hub_wheel_link:
-          Value: true
-        robile_2_drive_pivot_link:
-          Value: true
-        robile_2_drive_right_hub_wheel_link:
-          Value: true
-        robile_2_link:
-          Value: true
-        robile_3_link:
-          Value: true
-        robile_4_link:
-          Value: true
-        robile_5_drive_left_hub_wheel_link:
-          Value: true
-        robile_5_drive_pivot_link:
-          Value: true
-        robile_5_drive_right_hub_wheel_link:
-          Value: true
-        robile_5_link:
-          Value: true
-        robile_6_drive_left_hub_wheel_link:
-          Value: true
-        robile_6_drive_pivot_link:
-          Value: true
-        robile_6_drive_right_hub_wheel_link:
-          Value: true
-        robile_6_link:
-          Value: true
       Marker Scale: 1
       Name: TF
       Show Arrows: true
       Show Axes: true
       Show Names: false
       Tree:
-        map:
-          odom:
-            base_footprint:
-              base_link:
-                base_laser_front_link:
-                  {}
-                robile_1_link:
-                  robile_1_drive_pivot_link:
-                    robile_1_drive_left_hub_wheel_link:
-                      {}
-                    robile_1_drive_right_hub_wheel_link:
-                      {}
-                robile_2_link:
-                  robile_2_drive_pivot_link:
-                    robile_2_drive_left_hub_wheel_link:
-                      {}
-                    robile_2_drive_right_hub_wheel_link:
-                      {}
-                robile_3_link:
-                  {}
-                robile_4_link:
-                  {}
-                robile_5_link:
-                  robile_5_drive_pivot_link:
-                    robile_5_drive_left_hub_wheel_link:
-                      {}
-                    robile_5_drive_right_hub_wheel_link:
-                      {}
-                robile_6_link:
-                  robile_6_drive_pivot_link:
-                    robile_6_drive_left_hub_wheel_link:
-                      {}
-                    robile_6_drive_right_hub_wheel_link:
-                      {}
+        {}
       Update Interval: 0
-      Value: true
+      Value: false
     - Alpha: 1
       Autocompute Intensity Bounds: true
       Autocompute Value Bounds:
@@ -307,7 +230,7 @@ Visualization Manager:
       Class: rviz_default_plugins/Map
       Color Scheme: map
       Draw Behind: true
-      Enabled: true
+      Enabled: false
       Name: Map
       Topic:
         Depth: 5
@@ -315,15 +238,15 @@ Visualization Manager:
         Filter size: 10
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: /map
+        Value: /map_loaded
       Update Topic:
         Depth: 5
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: /map_updates
+        Value: /map_loaded_updates
       Use Timestamp: false
-      Value: true
+      Value: false
     - Alpha: 1
       Class: nav2_rviz_plugins/ParticleCloud
       Color: 255; 25; 0
@@ -344,7 +267,7 @@ Visualization Manager:
       Class: rviz_default_plugins/Map
       Color Scheme: costmap
       Draw Behind: false
-      Enabled: true
+      Enabled: false
       Name: Map
       Topic:
         Depth: 5
@@ -360,7 +283,7 @@ Visualization Manager:
         Reliability Policy: Reliable
         Value: /global_costmap/costmap_updates
       Use Timestamp: false
-      Value: true
+      Value: false
     - Alpha: 1
       Buffer Length: 1
       Class: rviz_default_plugins/Path
@@ -369,8 +292,8 @@ Visualization Manager:
       Head Diameter: 0.30000001192092896
       Head Length: 0.20000000298023224
       Length: 0.30000001192092896
-      Line Style: Lines
-      Line Width: 0.029999999329447746
+      Line Style: Billboards
+      Line Width: 0.05000000074505806
       Name: Path
       Offset:
         X: 0
@@ -389,10 +312,66 @@ Visualization Manager:
         Reliability Policy: Reliable
         Value: /plan
       Value: true
+    - Alpha: 0.699999988079071
+      Class: rviz_default_plugins/Map
+      Color Scheme: map
+      Draw Behind: false
+      Enabled: true
+      Name: Map
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        Filter size: 10
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /map
+      Update Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /map_updates
+      Use Timestamp: false
+      Value: true
+    - Alpha: 1
+      Axes Length: 1
+      Axes Radius: 0.10000000149011612
+      Class: rviz_default_plugins/PoseWithCovariance
+      Color: 255; 25; 0
+      Covariance:
+        Orientation:
+          Alpha: 0.5
+          Color: 255; 255; 127
+          Color Style: Unique
+          Frame: Local
+          Offset: 1
+          Scale: 1
+          Value: true
+        Position:
+          Alpha: 0.30000001192092896
+          Color: 204; 51; 204
+          Scale: 1
+          Value: true
+        Value: true
+      Enabled: true
+      Head Length: 0.30000001192092896
+      Head Radius: 0.20000000298023224
+      Name: PoseWithCovariance
+      Shaft Length: 1
+      Shaft Radius: 0.07500000298023224
+      Shape: Arrow
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        Filter size: 10
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /pose
+      Value: true
   Enabled: true
   Global Options:
     Background Color: 48; 48; 48
-    Fixed Frame: odom
+    Fixed Frame: map
     Frame Rate: 30
   Name: root
   Tools:
@@ -435,25 +414,25 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz_default_plugins/Orbit
-      Distance: 14.549836158752441
+      Distance: 9.075386047363281
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: -2.376143455505371
-        Y: -1.2191510200500488
-        Z: -0.9715380668640137
+        X: 4.735296726226807
+        Y: -1.581298828125
+        Z: -0.32343852519989014
       Focal Shape Fixed Size: true
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 0.43979713320732117
+      Pitch: 0.33479738235473633
       Target Frame: <Fixed Frame>
       Value: Orbit (rviz)
-      Yaw: 0.6603972911834717
+      Yaw: 0.7503829002380371
     Saved: ~
 Window Geometry:
   Displays:
